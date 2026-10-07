@@ -35,7 +35,7 @@ interface ThemeState {
   setTheme: (theme: ThemeSetting) => void
 }
 
-// フェーズ1で Dexie の Settings に移行する
+// 初回描画前の適用(index.html)に使うため localStorage に保存する
 export const useThemeStore = create<ThemeState>((set) => ({
   theme: readStored(),
   setTheme: (theme) => {

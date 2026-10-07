@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { BacklogScreen } from '../features/backlog/BacklogScreen'
 import { BoardScreen } from '../features/board/BoardScreen'
 import { SettingsScreen } from '../features/settings/SettingsScreen'
+import { useDataStore } from '../store/data'
 import { TimelineScreen } from '../features/timeline/TimelineScreen'
 import { PwaToast } from './PwaToast'
 import { useThemeEffect } from './useThemeEffect'
@@ -17,6 +18,10 @@ type TabId = (typeof TABS)[number]['id']
 
 export function App() {
   useThemeEffect()
+  const init = useDataStore((s) => s.init)
+  useEffect(() => {
+    void init()
+  }, [init])
   const [tab, setTab] = useState<TabId>('today')
   const Active = TABS.find((t) => t.id === tab)!.Screen
 
