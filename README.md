@@ -6,9 +6,9 @@
 
 ## 技術スタック
 
-React + TypeScript + Vite / vite-plugin-pwa / Tailwind CSS v4 / Zustand / Dexie.js (IndexedDB) / Vitest
+React + TypeScript + Vite / vite-plugin-pwa / Tailwind CSS v4 / Zustand / Dexie.js (IndexedDB) / date-fns / Vitest
 
-(以降のフェーズで dnd-kit、date-fns、rrule.js を追加予定)
+(以降のフェーズで dnd-kit、rrule.js を追加予定)
 
 ## 開発
 
@@ -32,7 +32,7 @@ Service Worker は開発サーバーでは無効です。オフライン動作�
 | 0 | Vite + PWA 雛形、iOS 向け meta、オフライン起動、テーマ | 完了 |
 | 1 | Dexie、Project/Workflow/Issue の CRUD | 完了 |
 | 2 | ボード | 完了(実機タッチ操作は未確認) |
-| 3 | バックログとスプリント | 未着手 |
+| 3 | バックログとスプリント | 完了(実機タッチ操作は未確認) |
 | 4 | Today タイムライン | 未着手 |
 | 5 | サブタスク、Epic、バーンダウン | 未着手 |
 | 6 | 繰り返し、アプリ内通知、バックアップ | 未着手 |

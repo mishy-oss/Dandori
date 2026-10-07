@@ -1,20 +1,26 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Issue } from '../../db/types'
 import { columnIssues } from '../../lib/issueOrder'
-import { selectCurrentProject, useDataStore } from '../../store/data'
+import { selectActiveSprint, selectCurrentProject, useDataStore } from '../../store/data'
 import { IssueEditor } from '../issue-editor/IssueEditor'
+import { SprintOverdueBanner } from '../sprint/SprintOverdueBanner'
 import { BoardCard } from './BoardCard'
 import { wipStatus } from './boardLogic'
 import { useBoardGestures } from './useBoardGestures'
 
-// アクティブスプリントでの絞り込みはフェーズ3で追加する(現状はプロジェクトの全Issue)
+// アクティブスプリントのIssueだけを表示するカンバン
 export function BoardScreen() {
   const project = useDataStore(selectCurrentProject)
   const workflow = useDataStore((s) => (project ? s.workflows[project.workflowId] : undefined))
-  const issues = useDataStore((s) => s.issues)
+  const allIssues = useDataStore((s) => s.issues)
+  const sprint = useDataStore(selectActiveSprint)
   const ready = useDataStore((s) => s.ready)
   const moveIssue = useDataStore((s) => s.moveIssue)
 
+  const issues = useMemo(
+    () => (sprint ? allIssues.filter((i) => i.sprintId === sprint.id) : []),
+    [allIssues, sprint],
+  )
   const [columnIndex, setColumnIndex] = useState(0)
   const [editing, setEditing] = useState<Issue | 'new' | null>(null)
   const [pulseId, setPulseId] = useState<string | null>(null)
@@ -33,11 +39,11 @@ export function BoardScreen() {
 
   async function move(issueId: string, statusIdx: number, index: number) {
     const status = statuses[statusIdx]
-    if (!status) return
+    if (!status || !sprint) return
     setPulseId(issueId)
     try {
       setError(null)
-      await moveIssue(issueId, status.id, index)
+      await moveIssue(issueId, status.id, index, sprint.id)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
@@ -51,7 +57,7 @@ export function BoardScreen() {
     onSwipeMove: (id, target) => {
       // 実行時点の最新の並びの末尾へ入れる(アニメーション待ちの間に状態が変わりうるため)
       const latest = useDataStore.getState().issues
-      void move(id, target, columnIssues(latest, statuses[target].id).length)
+      void move(id, target, columnIssues(latest, statuses[target].id, sprint?.id).length)
     },
     onDrop: (id, col, index) => void move(id, col, index),
   })
@@ -64,6 +70,20 @@ export function BoardScreen() {
         <h1 className="text-2xl font-bold">Board</h1>
         <p className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted">
           「設定」でプロジェクトを作成すると、ボードを使えます
+        </p>
+      </section>
+    )
+  }
+
+  if (!sprint) {
+    return (
+      <section className="flex flex-col gap-4 p-4">
+        <div>
+          <h1 className="text-2xl font-bold">Board</h1>
+          <p className="text-sm text-muted">{project.name}</p>
+        </div>
+        <p className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted">
+          アクティブなスプリントがありません。Backlog でスプリントにIssueを追加して開始してください
         </p>
       </section>
     )
@@ -96,8 +116,12 @@ export function BoardScreen() {
     <section className="flex min-h-full flex-col gap-3 p-4">
       <div>
         <h1 className="text-2xl font-bold">Board</h1>
-        <p className="text-sm text-muted">{project.name}</p>
+        <p className="text-sm text-muted">
+          {project.name} · {sprint.name}({sprint.startDate} 〜 {sprint.endDate})
+        </p>
       </div>
+
+      <SprintOverdueBanner />
 
       <div role="tablist" aria-label="ステータス" className="-mx-4 flex gap-2 overflow-x-auto px-4">
         {statuses.map((s, i) => {
@@ -227,6 +251,7 @@ export function BoardScreen() {
           key={editing === 'new' ? 'new' : editing.id}
           issue={editing === 'new' ? null : editing}
           defaultStatusId={active.id}
+          defaultSprintId={sprint.id}
           onClose={() => setEditing(null)}
         />
       )}

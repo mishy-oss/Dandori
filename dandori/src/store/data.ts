@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import * as issueRepo from '../db/issueRepo'
 import * as projectRepo from '../db/projectRepo'
-import type { Issue, Project, Workflow } from '../db/types'
+import * as sprintRepo from '../db/sprintRepo'
+import type { Issue, Project, Sprint, Workflow } from '../db/types'
 import { applyMove } from '../lib/issueOrder'
 
 const CURRENT_PROJECT_KEY = 'dandori:currentProject'
@@ -12,6 +13,7 @@ interface DataState {
   workflows: Record<string, Workflow>
   currentProjectId: string | null
   issues: Issue[]
+  sprints: Sprint[]
 
   init: () => Promise<void>
   selectProject: (id: string) => Promise<void>
@@ -23,8 +25,22 @@ interface DataState {
   deleteProject: (id: string) => Promise<void>
   createIssue: (input: Omit<issueRepo.CreateIssueInput, 'projectId'>) => Promise<Issue>
   updateIssue: (id: string, patch: issueRepo.IssuePatch) => Promise<void>
-  moveIssue: (id: string, statusId: string, index: number) => Promise<void>
+  moveIssue: (
+    id: string,
+    statusId: string,
+    index: number,
+    scopeSprintId?: string | null,
+  ) => Promise<void>
   deleteIssue: (id: string) => Promise<void>
+  createSprint: (input?: sprintRepo.SprintInput) => Promise<Sprint>
+  updateSprint: (id: string, patch: Parameters<typeof sprintRepo.updateSprint>[1]) => Promise<void>
+  deleteSprint: (id: string) => Promise<void>
+  startSprint: (id: string) => Promise<void>
+  completeSprint: (
+    id: string,
+    incomplete: sprintRepo.IncompleteIssuesAction,
+  ) => Promise<sprintRepo.CompleteSprintResult>
+  assignIssueToSprint: (issueId: string, sprintId: string | null) => Promise<void>
 }
 
 function readCurrent(): string | null {
@@ -55,8 +71,9 @@ export const useDataStore = create<DataState>((set, get) => {
       if (w) workflows[w.id] = w
     }
     const issues = current ? await issueRepo.listIssues(current.id) : []
+    const sprints = current ? await sprintRepo.listSprints(current.id) : []
     writeCurrent(current?.id ?? null)
-    set({ ready: true, projects, workflows, currentProjectId: current?.id ?? null, issues })
+    set({ ready: true, projects, workflows, currentProjectId: current?.id ?? null, issues, sprints })
   }
 
   function requireProjectId(): string {
@@ -71,6 +88,7 @@ export const useDataStore = create<DataState>((set, get) => {
     workflows: {},
     currentProjectId: null,
     issues: [],
+    sprints: [],
 
     init: async () => {
       // 端末のストレージ削除対策。拒否されても動作に影響はない
@@ -99,11 +117,11 @@ export const useDataStore = create<DataState>((set, get) => {
       await issueRepo.updateIssue(id, patch)
       await reload()
     },
-    moveIssue: async (id, statusId, index) => {
+    moveIssue: async (id, statusId, index, scopeSprintId) => {
       // ドロップ直後に元の位置へ戻って見えないよう、保存前に画面だけ先に更新する
-      set({ issues: applyMove(get().issues, id, statusId, index) })
+      set({ issues: applyMove(get().issues, id, statusId, index, scopeSprintId) })
       try {
-        await issueRepo.moveIssue(id, statusId, index)
+        await issueRepo.moveIssue(id, statusId, index, scopeSprintId)
       } finally {
         await reload()
       }
@@ -112,9 +130,39 @@ export const useDataStore = create<DataState>((set, get) => {
       await issueRepo.deleteIssue(id)
       await reload()
     },
+    createSprint: async (input) => {
+      const s = await sprintRepo.createSprint(requireProjectId(), input)
+      await reload()
+      return s
+    },
+    updateSprint: async (id, patch) => {
+      await sprintRepo.updateSprint(id, patch)
+      await reload()
+    },
+    deleteSprint: async (id) => {
+      await sprintRepo.deleteSprint(id)
+      await reload()
+    },
+    startSprint: async (id) => {
+      await sprintRepo.startSprint(id)
+      await reload()
+    },
+    completeSprint: async (id, incomplete) => {
+      const result = await sprintRepo.completeSprint(id, incomplete)
+      await reload()
+      return result
+    },
+    assignIssueToSprint: async (issueId, sprintId) => {
+      await sprintRepo.assignIssueToSprint(issueId, sprintId)
+      await reload()
+    },
   }
 })
 
 export function selectCurrentProject(s: DataState): Project | null {
   return s.projects.find((p) => p.id === s.currentProjectId) ?? null
+}
+
+export function selectActiveSprint(s: DataState): Sprint | null {
+  return s.sprints.find((sp) => sp.state === 'active') ?? null
 }

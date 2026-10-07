@@ -98,12 +98,17 @@ export async function updateProject(
 }
 
 export async function deleteProject(id: string): Promise<void> {
-  await db.transaction('rw', db.projects, db.workflows, db.issues, async () => {
+  await db.transaction('rw', db.projects, db.workflows, db.issues, db.sprints, async () => {
     const p = await getProject(id)
     if (!p) return
     const t = now()
     await db.projects.update(id, { deletedAt: t, updatedAt: t })
     await db.workflows.update(p.workflowId, { deletedAt: t, updatedAt: t })
+    await db.sprints
+      .where('projectId')
+      .equals(id)
+      .filter((s) => s.deletedAt === null)
+      .modify({ deletedAt: t, updatedAt: t })
     await db.issues
       .where('projectId')
       .equals(id)
