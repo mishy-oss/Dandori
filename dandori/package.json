@@ -6,10 +6,11 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview --host",
+    "preview": "npm run build && wrangler dev",
     "lint": "eslint .",
     "test": "vitest run",
-    "generate-icons": "pwa-assets-generator"
+    "generate-icons": "pwa-assets-generator",
+    "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {
     "date-fns": "^4.4.0",
@@ -21,6 +22,7 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.63.0",
     "@eslint/js": "^10.0.1",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^26.6.4",
@@ -38,6 +40,7 @@
     "typescript-eslint": "^8.71.1",
     "vite": "^8.3.3",
     "vite-plugin-pwa": "^2.0.0",
-    "vitest": "^5.0.3"
+    "vitest": "^5.0.3",
+    "wrangler": "^4.148.0"
   }
 }
