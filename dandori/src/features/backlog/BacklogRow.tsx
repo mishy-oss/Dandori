@@ -14,6 +14,9 @@ export function BacklogRow({
   issue,
   done,
   statusName,
+  parentIssue,
+  childCount = 0,
+  childDoneCount = 0,
   onOpen,
   onMove,
   onToggleDone,
@@ -21,6 +24,9 @@ export function BacklogRow({
   issue: Issue
   done: boolean
   statusName: string
+  parentIssue?: Issue
+  childCount?: number
+  childDoneCount?: number
   onOpen: () => void
   onMove: () => void
   onToggleDone: () => void
@@ -66,6 +72,14 @@ export function BacklogRow({
           </span>
           <span className={done ? 'line-through opacity-60' : ''}>{issue.title}</span>
           <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs">{statusName}</span>
+          {parentIssue && (
+            <span className="max-w-full truncate text-xs text-muted">
+              親: {parentIssue.type === 'epic' ? 'Epic' : parentIssue.type} · {formatIssueNumber(parentIssue.number)} · {parentIssue.title}
+            </span>
+          )}
+          {childCount > 0 && (
+            <span className="text-xs text-muted">子Issue {childDoneCount}/{childCount} 完了</span>
+          )}
         </div>
       </div>
     </div>

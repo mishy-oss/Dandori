@@ -3,7 +3,7 @@ import { db } from './db'
 import { addDaysStr, isValidDateStr, todayStr } from '../lib/date'
 import { newId, now } from '../lib/id'
 import { getProject, getWorkflow } from './projectRepo'
-import type { Issue, Sprint } from './types'
+import type { Issue, Sprint, SprintSnapshot } from './types'
 
 export const DEFAULT_SPRINT_DAYS = 14
 
@@ -148,6 +148,45 @@ export async function startSprint(id: string): Promise<Sprint> {
   })
 }
 
+function makeSnapshot(sprint: Sprint, issues: Issue[], doneIds: Set<string>, date: string): SprintSnapshot {
+  const sprintIssues = issues.filter((i) => i.sprintId === sprint.id && i.deletedAt === null)
+  const parentsWithChildren = new Set(sprintIssues.flatMap((i) => (i.parentId ? [i.parentId] : [])))
+  // Epic and parent estimates are represented by their leaf work items to avoid double-counting.
+  const workItems = sprintIssues.filter((i) => i.type !== 'epic' && !parentsWithChildren.has(i.id))
+  const openItems = workItems.filter((i) => !doneIds.has(i.statusId))
+  return {
+    date,
+    totalMin: workItems.reduce((sum, i) => sum + (i.estimateMin ?? 0), 0),
+    totalCount: workItems.length,
+    remainingMin: openItems.reduce((sum, i) => sum + (i.estimateMin ?? 0), 0),
+    remainingCount: openItems.length,
+  }
+}
+
+function withSnapshot(sprint: Sprint, snapshot: SprintSnapshot): Sprint {
+  return {
+    ...sprint,
+    snapshots: [...sprint.snapshots.filter((s) => s.date !== snapshot.date), snapshot].sort((a, b) => a.date.localeCompare(b.date)),
+    updatedAt: now(),
+  }
+}
+
+/** Record or refresh today's actual remaining sprint scope. */
+export async function recordSprintSnapshot(id: string, date: string = todayStr()): Promise<Sprint | undefined> {
+  return db.transaction('rw', db.projects, db.workflows, db.sprints, db.issues, async () => {
+    const sprint = await getSprint(id)
+    if (!sprint || sprint.state !== 'active') return sprint
+    const project = await getProject(sprint.projectId)
+    const workflow = project && (await getWorkflow(project.workflowId))
+    if (!workflow) throw new Error('ワークフローが見つかりません')
+    const issues = await db.issues.where('sprintId').equals(id).toArray()
+    const doneIds = new Set(workflow.statuses.filter((status) => status.category === 'done').map((status) => status.id))
+    const updated = withSnapshot(sprint, makeSnapshot(sprint, issues, doneIds, date))
+    await db.sprints.put(updated)
+    return updated
+  })
+}
+
 export async function completeSprint(
   id: string,
   incomplete: IncompleteIssuesAction,
@@ -168,6 +207,7 @@ export async function completeSprint(
       .equals(id)
       .filter((i) => i.deletedAt === null)
       .toArray()
+    await db.sprints.put(withSnapshot(s, makeSnapshot(s, issues, doneIds, today)))
     const open: Issue[] = issues.filter((i) => !doneIds.has(i.statusId))
 
     let nextSprintId: string | null = null

@@ -82,12 +82,7 @@ export async function createIssue(input: CreateIssueInput): Promise<Issue> {
     const status = workflow.statuses.find((s) => s.id === statusId)
     if (!status) throw new Error('ステータスが見つかりません')
 
-    if (input.parentId) {
-      const parent = await getIssue(input.parentId)
-      if (!parent || parent.projectId !== project.id) {
-        throw new Error('親Issueが見つかりません')
-      }
-    }
+    if (input.parentId) await validateParent(project.id, input.parentId)
 
     validateSchedule(input.date ?? null, input.startMin ?? null, input.durationMin ?? DEFAULT_DURATION_MIN)
 
@@ -141,7 +136,7 @@ export async function updateIssue(
   return db.transaction('rw', db.projects, db.workflows, db.issues, async () => {
     const current = await getIssue(id)
     if (!current) throw new Error('Issueが見つかりません')
-    if (patch.parentId === id) throw new Error('自分自身を親にはできません')
+    if (patch.parentId) await validateParent(current.projectId, patch.parentId, id)
 
     const t = now()
     const next: Issue = {
@@ -165,6 +160,19 @@ export async function updateIssue(
     await db.issues.put(next)
     return next
   })
+}
+
+async function validateParent(projectId: string, parentId: string, issueId?: string): Promise<void> {
+  const seen = new Set(issueId ? [issueId] : [])
+  let parent = await getIssue(parentId)
+  while (parent) {
+    if (parent.projectId !== projectId) throw new Error('別のプロジェクトのIssueは親にできません')
+    if (seen.has(parent.id)) throw new Error('親子関係が循環しています')
+    seen.add(parent.id)
+    if (!parent.parentId) return
+    parent = await getIssue(parent.parentId)
+  }
+  throw new Error('親Issueが見つかりません')
 }
 
 // ステータス列 statusId の index 番目(自分自身を除く)へ移動する。スケジュール(date/startMin)には触れない。

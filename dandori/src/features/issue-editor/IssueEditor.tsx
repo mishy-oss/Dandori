@@ -49,12 +49,34 @@ export function IssueEditor({
     issue?.statusId ?? defaultStatusId ?? workflow?.statuses[0]?.id ?? '',
   )
   const [sprintId, setSprintId] = useState<string | null>(issue ? issue.sprintId : defaultSprintId)
+  const [parentId, setParentId] = useState<string | null>(issue?.parentId ?? null)
   const [dueDate, setDueDate] = useState(issue?.dueDate ?? '')
   const [date, setDate] = useState(issue?.date ?? initialSchedule?.date ?? '')
   const startInit = issue ? issue.startMin : (initialSchedule?.startMin ?? null)
   const [startTime, setStartTime] = useState(startInit === null ? '' : formatMin(startInit))
   const [duration, setDuration] = useState(String(issue?.durationMin ?? defaultDuration))
   const [error, setError] = useState<string | null>(null)
+  const [childTitle, setChildTitle] = useState('')
+  const [addingChild, setAddingChild] = useState(false)
+  const issueId = issue?.id
+
+  const descendants = useMemo(() => {
+    const found = new Set<string>()
+    if (!issueId) return found
+    const parents = [issueId]
+    while (parents.length) {
+      const parent = parents.pop()!
+      for (const child of issues) {
+        if (child.parentId === parent && !found.has(child.id)) {
+          found.add(child.id)
+          parents.push(child.id)
+        }
+      }
+    }
+    return found
+  }, [issues, issueId])
+  const parentOptions = issues.filter((i) => i.id !== issueId && !descendants.has(i.id))
+  const children = issueId ? issues.filter((i) => i.parentId === issueId) : []
 
   async function reorder(delta: -1 | 1) {
     if (!issue) return
@@ -74,6 +96,19 @@ export function IssueEditor({
     }
   }
 
+  async function addChild() {
+    if (!issue || !childTitle.trim() || addingChild) return
+    setAddingChild(true)
+    try {
+      await createIssue({ title: childTitle, type: 'task', parentId: issue.id, sprintId: issue.sprintId })
+      setChildTitle('')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setAddingChild(false)
+    }
+  }
+
   function onSubmit(e: FormEvent) {
     e.preventDefault()
     const startMin = startTime ? parseTime(startTime) : null
@@ -87,6 +122,7 @@ export function IssueEditor({
       type,
       priority,
       statusId,
+      parentId,
       dueDate: dueDate || null,
       date: date || null,
       startMin,
@@ -183,6 +219,17 @@ export function IssueEditor({
             </select>
           </label>
           <label className="flex flex-col gap-1 text-sm text-muted">
+            親Issue / Epic
+            <select className={FIELD} value={parentId ?? ''} onChange={(e) => setParentId(e.target.value || null)}>
+              <option value="">なし</option>
+              {parentOptions.map((parent) => (
+                <option key={parent.id} value={parent.id}>
+                  {parent.type === 'epic' ? 'Epic' : parent.type} · {formatIssueNumber(parent.number)} · {parent.title}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-sm text-muted">
             期限
             <input
               type="date"
@@ -232,6 +279,50 @@ export function IssueEditor({
             未配置に戻す(時刻をクリア)
           </button>
         </fieldset>
+
+        {issue && (
+          <fieldset className="flex flex-col gap-2 rounded-lg border border-border p-3">
+            <legend className="px-1 text-sm font-semibold text-muted">
+              子Issue / サブタスク ({children.length})
+            </legend>
+            {children.length > 0 ? (
+              <ul className="flex flex-col gap-1">
+                {children.map((child) => (
+                  <li key={child.id} className="flex items-center gap-2 rounded-lg bg-surface-2 px-3 py-2 text-sm">
+                    <span className="shrink-0 text-xs text-muted">{child.type === 'epic' ? 'Epic' : child.type} · {formatIssueNumber(child.number)}</span>
+                    <span className="min-w-0 flex-1 truncate">{child.title}</span>
+                    <span className="shrink-0 text-xs text-muted">{workflow?.statuses.find((s) => s.id === child.statusId)?.name}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-xs text-muted">子Issueはまだありません</p>
+            )}
+            <div className="flex gap-2">
+              <input
+                aria-label="子Issueのタイトル"
+                className={`${FIELD} min-w-0 flex-1`}
+                placeholder="サブタスクを追加"
+                value={childTitle}
+                onChange={(e) => setChildTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    void addChild()
+                  }
+                }}
+              />
+              <button
+                type="button"
+                disabled={!childTitle.trim() || addingChild}
+                onClick={() => void addChild()}
+                className="min-h-11 shrink-0 rounded-lg border border-border px-3 text-sm disabled:opacity-40"
+              >
+                追加
+              </button>
+            </div>
+          </fieldset>
+        )}
 
         {issue && column.length > 1 && (
           <div className="flex items-center gap-2">

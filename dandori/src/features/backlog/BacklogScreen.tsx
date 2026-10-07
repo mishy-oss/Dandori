@@ -36,6 +36,14 @@ export function BacklogScreen() {
     () => new Set((workflow?.statuses ?? []).filter((s) => s.category === 'done').map((s) => s.id)),
     [workflow],
   )
+  const childrenByParent = useMemo(() => {
+    const result = new Map<string, Issue[]>()
+    for (const issue of issues) {
+      if (!issue.parentId) continue
+      result.set(issue.parentId, [...(result.get(issue.parentId) ?? []), issue])
+    }
+    return result
+  }, [issues])
 
   if (!ready || !project) return null
 
@@ -133,6 +141,7 @@ export function BacklogScreen() {
             key={s.id}
             sprint={s}
             issues={inSprint.filter(match)}
+          allIssues={issues}
             allCount={inSprint.length}
             doneCount={inSprint.filter((i) => doneIds.has(i.statusId)).length}
             estimateMin={inSprint.reduce((sum, i) => sum + (i.estimateMin ?? 0), 0)}
@@ -166,18 +175,22 @@ export function BacklogScreen() {
           </p>
         ) : (
           <ul className="flex flex-col gap-2">
-            {backlogVisible.map((i) => (
-              <li key={i.id}>
+            {backlogVisible.map((i) => {
+              const children = childrenByParent.get(i.id) ?? []
+              return <li key={i.id}>
                 <BacklogRow
                   issue={i}
                   done={doneIds.has(i.statusId)}
                   statusName={statusName(i.statusId)}
+                  parentIssue={i.parentId ? issues.find((parent) => parent.id === i.parentId) : undefined}
+                  childCount={children.length}
+                  childDoneCount={children.filter((child) => doneIds.has(child.statusId)).length}
                   onOpen={() => setEditing(i)}
                   onMove={() => setMoving(i)}
                   onToggleDone={() => void run(() => toggleIssueDone(i.id))}
                 />
               </li>
-            ))}
+            })}
           </ul>
         )}
       </section>
