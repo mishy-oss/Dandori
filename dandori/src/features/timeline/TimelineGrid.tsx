@@ -156,11 +156,11 @@ export function TimelineGrid({
                   )}
                 </div>
               </div>
-              {/* 上端ハンドル。左端の完了ボタンには被せない */}
+              {/* 上端ハンドル。上下のハンドルを中央で揃える */}
               <div
                 data-resize-top-id={issue.id}
                 aria-hidden
-                className="absolute inset-x-0 left-7 top-0 flex touch-none items-start justify-center"
+                className="absolute inset-x-0 top-0 flex touch-none items-start justify-center"
                 style={{ height: Math.min(16, Math.round(blockHeight * 0.35)) }}
               >
                 <span className="mt-0.5 h-1 w-8 rounded-full bg-muted/60" />
