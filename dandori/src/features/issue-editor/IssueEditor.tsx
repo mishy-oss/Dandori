@@ -8,24 +8,33 @@ const FIELD =
 export function IssueEditor({
   issue,
   defaultStatusId,
+  defaultSprintId = null,
   onClose,
 }: {
   issue: Issue | null
   defaultStatusId?: string
+  defaultSprintId?: string | null
   onClose: () => void
 }) {
   const project = useDataStore(selectCurrentProject)
   const workflow = useDataStore((s) => (project ? s.workflows[project.workflowId] : undefined))
+  const sprints = useDataStore((s) => s.sprints)
   const createIssue = useDataStore((s) => s.createIssue)
   const updateIssue = useDataStore((s) => s.updateIssue)
   const deleteIssue = useDataStore((s) => s.deleteIssue)
   const moveIssue = useDataStore((s) => s.moveIssue)
+  const assignIssueToSprint = useDataStore((s) => s.assignIssueToSprint)
   const issues = useDataStore((s) => s.issues)
+  // 並び順は「同じステータス・同じスプリント(またはバックログ)」の中で扱う
   const column = useMemo(
-    () => (issue ? issues.filter((i) => i.statusId === issue.statusId) : []),
+    () =>
+      issue
+        ? issues.filter((i) => i.statusId === issue.statusId && i.sprintId === issue.sprintId)
+        : [],
     [issues, issue],
   )
   const position = issue ? column.findIndex((i) => i.id === issue.id) : -1
+  const sprintOptions = sprints.filter((s) => s.state !== 'closed' || s.id === issue?.sprintId)
 
   const [title, setTitle] = useState(issue?.title ?? '')
   const [description, setDescription] = useState(issue?.description ?? '')
@@ -34,13 +43,14 @@ export function IssueEditor({
   const [statusId, setStatusId] = useState(
     issue?.statusId ?? defaultStatusId ?? workflow?.statuses[0]?.id ?? '',
   )
+  const [sprintId, setSprintId] = useState<string | null>(issue ? issue.sprintId : defaultSprintId)
   const [dueDate, setDueDate] = useState(issue?.dueDate ?? '')
   const [error, setError] = useState<string | null>(null)
 
   async function reorder(delta: -1 | 1) {
     if (!issue) return
     try {
-      await moveIssue(issue.id, issue.statusId, position + delta)
+      await moveIssue(issue.id, issue.statusId, position + delta, issue.sprintId)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
@@ -65,7 +75,14 @@ export function IssueEditor({
       statusId,
       dueDate: dueDate || null,
     }
-    void run(() => (issue ? updateIssue(issue.id, common) : createIssue(common)))
+    void run(async () => {
+      if (!issue) {
+        await createIssue({ ...common, sprintId })
+        return
+      }
+      if (sprintId !== issue.sprintId) await assignIssueToSprint(issue.id, sprintId)
+      await updateIssue(issue.id, common)
+    })
   }
 
   return (
@@ -127,6 +144,21 @@ export function IssueEditor({
             ステータス
             <select className={FIELD} value={statusId} onChange={(e) => setStatusId(e.target.value)}>
               {workflow?.statuses.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-sm text-muted">
+            スプリント
+            <select
+              className={FIELD}
+              value={sprintId ?? ''}
+              onChange={(e) => setSprintId(e.target.value || null)}
+            >
+              <option value="">バックログ</option>
+              {sprintOptions.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
                 </option>

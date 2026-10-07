@@ -12,6 +12,7 @@
     "generate-icons": "pwa-assets-generator"
   },
   "dependencies": {
+    "date-fns": "^4.4.0",
     "dexie": "^4.4.6",
     "fractional-indexing": "^4.0.0",
     "react": "^19.3.0",

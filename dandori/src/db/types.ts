@@ -66,3 +66,26 @@ export interface Issue {
 
 export const ISSUE_TYPES: IssueType[] = ['task', 'bug', 'story', 'epic']
 export const PRIORITIES: Priority[] = ['low', 'medium', 'high', 'urgent']
+
+export type SprintState = 'planned' | 'active' | 'closed'
+
+export interface SprintSnapshot {
+  date: string
+  remainingMin: number
+  remainingCount: number
+}
+
+export interface Sprint {
+  id: ID
+  projectId: ID
+  name: string
+  goal?: string
+  startDate: string
+  endDate: string
+  state: SprintState
+  // バーンダウン用の日次スナップショット(記録はフェーズ5)
+  snapshots: SprintSnapshot[]
+  createdAt: number
+  updatedAt: number
+  deletedAt: number | null
+}

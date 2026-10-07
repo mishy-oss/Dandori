@@ -2,6 +2,7 @@ import { db } from './db'
 import { newId, now } from '../lib/id'
 import { compareRank, rankAfter, rankBetween, ranksForCount } from '../lib/rank'
 import { getProject, getWorkflow } from './projectRepo'
+import { getSprint } from './sprintRepo'
 import type { Issue, IssueType, Priority } from './types'
 
 export interface CreateIssueInput {
@@ -15,6 +16,7 @@ export interface CreateIssueInput {
   labels?: string[]
   dueDate?: string | null
   estimateMin?: number | null
+  sprintId?: string | null
 }
 
 export type IssuePatch = Partial<
@@ -58,11 +60,17 @@ export async function createIssue(input: CreateIssueInput): Promise<Issue> {
   const title = input.title.trim()
   if (!title) throw new Error('タイトルを入力してください')
 
-  return db.transaction('rw', db.projects, db.workflows, db.issues, async () => {
+  return db.transaction('rw', db.projects, db.workflows, db.issues, db.sprints, async () => {
     const project = await getProject(input.projectId)
     if (!project) throw new Error('プロジェクトが見つかりません')
     const workflow = await getWorkflow(project.workflowId)
     if (!workflow) throw new Error('ワークフローが見つかりません')
+
+    if (input.sprintId) {
+      const sprint = await getSprint(input.sprintId)
+      if (!sprint || sprint.projectId !== project.id) throw new Error('スプリントが見つかりません')
+      if (sprint.state === 'closed') throw new Error('完了したスプリントには追加できません')
+    }
 
     const statusId =
       input.statusId ??
@@ -91,7 +99,7 @@ export async function createIssue(input: CreateIssueInput): Promise<Issue> {
       labels: input.labels ?? [],
       dueDate: input.dueDate ?? null,
       estimateMin: input.estimateMin ?? null,
-      sprintId: null,
+      sprintId: input.sprintId ?? null,
       rank: await nextRankInStatus(project.id, statusId),
       date: null,
       startMin: null,
@@ -152,11 +160,13 @@ export async function updateIssue(
   })
 }
 
-// ステータス列 statusId の index 番目(自分自身を除く)へ移動する。スケジュール(date/startMin)には触れない
+// ステータス列 statusId の index 番目(自分自身を除く)へ移動する。スケジュール(date/startMin)には触れない。
+// scopeSprintId を渡すと、そのスプリント(null はバックログ)のIssueだけを「見えている列」として index を解釈する
 export async function moveIssue(
   id: string,
   statusId: string,
   index: number,
+  scopeSprintId?: string | null,
 ): Promise<Issue> {
   return db.transaction('rw', db.projects, db.workflows, db.issues, async () => {
     const current = await getIssue(id)
@@ -171,7 +181,7 @@ export async function moveIssue(
       await db.issues.where('projectId').equals(current.projectId).toArray(),
       statusId,
     )
-      .filter((i) => i.id !== id)
+      .filter((i) => i.id !== id && (scopeSprintId === undefined || i.sprintId === scopeSprintId))
       .sort(compareRank)
     const at = Math.max(0, Math.min(index, others.length))
 
