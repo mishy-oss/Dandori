@@ -4,6 +4,9 @@ import type { Project, Workflow, WorkflowStatus } from './types'
 
 export const PROJECT_KEY_PATTERN = /^[A-Z][A-Z0-9]{1,9}$/
 
+// UI にプロジェクトの概念は出さず、内部では常に1つの既定プロジェクトに全Issueを紐づける
+export const DEFAULT_PROJECT = { key: 'TASK', name: 'Dandori' } as const
+
 export function createDefaultStatuses(): WorkflowStatus[] {
   return [
     { id: newId(), name: 'To Do', category: 'todo' },
@@ -74,7 +77,15 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
   })
 }
 
-// キーは Issue 表示名(APP-12)の元になるため変更不可
+// 起動時に呼ぶ。プロジェクトが無ければ既定のものを作る(同時に2回呼ばれても1つしか作らない)
+export async function ensureDefaultProject(): Promise<Project> {
+  return db.transaction('rw', db.projects, db.workflows, async () => {
+    const existing = await listProjects()
+    return existing[0] ?? createProject(DEFAULT_PROJECT)
+  })
+}
+
+// キーは Issue 表示名の元になるため変更不可
 export async function updateProject(
   id: string,
   patch: Partial<Pick<Project, 'name' | 'color'>>,

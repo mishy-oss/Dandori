@@ -1,16 +1,15 @@
 import type { Issue } from '../../db/types'
+import { formatIssueNumber } from '../../lib/issueNumber'
 import type { TimelineDrag } from './useTimelineGestures'
 
 export function UnplacedTray({
   issues,
-  projectKey,
   drag,
   hasSprint,
   onOpen,
   shouldSuppressClick,
 }: {
   issues: Issue[]
-  projectKey: string
   drag: TimelineDrag | null
   hasSprint: boolean
   onOpen: (issue: Issue) => void
@@ -52,7 +51,7 @@ export function UnplacedTray({
                 style={{ borderLeft: `4px solid ${i.color}` }}
               >
                 <span className="text-[10px] text-muted">
-                  {projectKey}-{i.number} · {i.durationMin}分
+                  {formatIssueNumber(i.number)} · {i.durationMin}分
                 </span>
                 <span className="truncate text-sm">{i.title}</span>
               </div>

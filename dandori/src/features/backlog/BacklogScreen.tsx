@@ -36,20 +36,10 @@ export function BacklogScreen() {
     [workflow],
   )
 
-  if (!ready) return null
-
-  if (!project) {
-    return (
-      <Screen title="Backlog">
-        <p className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted">
-          「設定」でプロジェクトを作成すると、Issueを追加できます
-        </p>
-      </Screen>
-    )
-  }
+  if (!ready || !project) return null
 
   const statusName = (id: string) => workflow?.statuses.find((s) => s.id === id)?.name ?? ''
-  const match = (i: Issue) => matchesFilter(i, filter, project.key)
+  const match = (i: Issue) => matchesFilter(i, filter)
   const filtered = isFilterActive(filter)
   const visibleSprints = sprints
     .filter((s) => showClosed || s.state !== 'closed')
@@ -70,7 +60,7 @@ export function BacklogScreen() {
   return (
     <Screen title="Backlog">
       <div className="-mt-2 flex items-center gap-2">
-        <p className="flex-1 text-sm text-muted">{project.name}</p>
+        <p className="flex-1 text-sm text-muted">{issues.length}件</p>
         <button
           onClick={() => setSprintForm('new')}
           className="min-h-11 rounded-lg border border-border bg-surface px-4 text-sm"
@@ -146,7 +136,6 @@ export function BacklogScreen() {
             doneCount={inSprint.filter((i) => doneIds.has(i.statusId)).length}
             estimateMin={inSprint.reduce((sum, i) => sum + (i.estimateMin ?? 0), 0)}
             filtered={filtered}
-            projectKey={project.key}
             statusName={statusName}
             onOpen={setEditing}
             onMove={setMoving}
@@ -178,7 +167,6 @@ export function BacklogScreen() {
               <li key={i.id}>
                 <BacklogRow
                   issue={i}
-                  projectKey={project.key}
                   statusName={statusName(i.statusId)}
                   onOpen={() => setEditing(i)}
                   onMove={() => setMoving(i)}
@@ -210,7 +198,6 @@ export function BacklogScreen() {
           key={moving.id}
           issue={moving}
           sprints={sprints}
-          projectKey={project.key}
           onClose={() => setMoving(null)}
         />
       )}

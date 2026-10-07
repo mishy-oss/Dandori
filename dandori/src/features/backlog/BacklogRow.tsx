@@ -1,4 +1,5 @@
 import type { Issue, Priority } from '../../db/types'
+import { formatIssueNumber } from '../../lib/issueNumber'
 import { useRowGestures } from './useRowGestures'
 
 const PRIORITY_COLOR: Record<Priority, string> = {
@@ -10,13 +11,11 @@ const PRIORITY_COLOR: Record<Priority, string> = {
 
 export function BacklogRow({
   issue,
-  projectKey,
   statusName,
   onOpen,
   onMove,
 }: {
   issue: Issue
-  projectKey: string
   statusName: string
   onOpen: () => void
   onMove: () => void
@@ -55,7 +54,7 @@ export function BacklogRow({
         }}
       >
         <span className="text-xs text-muted">
-          {projectKey}-{issue.number} · {issue.type} · {issue.priority}
+          {formatIssueNumber(issue.number)} · {issue.type} · {issue.priority}
           {issue.estimateMin ? ` · ${issue.estimateMin}分` : ''}
         </span>
         <span className={issue.completedAt ? 'line-through opacity-60' : ''}>{issue.title}</span>

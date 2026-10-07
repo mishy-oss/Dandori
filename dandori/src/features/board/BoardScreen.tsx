@@ -62,26 +62,12 @@ export function BoardScreen() {
     onDrop: (id, col, index) => void move(id, col, index),
   })
 
-  if (!ready) return null
-
-  if (!project || !active) {
-    return (
-      <section className="flex flex-col gap-4 p-4">
-        <h1 className="text-2xl font-bold">Board</h1>
-        <p className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted">
-          「設定」でプロジェクトを作成すると、ボードを使えます
-        </p>
-      </section>
-    )
-  }
+  if (!ready || !project || !active) return null
 
   if (!sprint) {
     return (
       <section className="flex flex-col gap-4 p-4">
-        <div>
-          <h1 className="text-2xl font-bold">Board</h1>
-          <p className="text-sm text-muted">{project.name}</p>
-        </div>
+        <h1 className="text-2xl font-bold">Board</h1>
         <p className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted">
           アクティブなスプリントがありません。Backlog でスプリントにIssueを追加して開始してください
         </p>
@@ -117,7 +103,7 @@ export function BoardScreen() {
       <div>
         <h1 className="text-2xl font-bold">Board</h1>
         <p className="text-sm text-muted">
-          {project.name} · {sprint.name}({sprint.startDate} 〜 {sprint.endDate})
+          {sprint.name}({sprint.startDate} 〜 {sprint.endDate})
         </p>
       </div>
 
@@ -191,7 +177,6 @@ export function BoardScreen() {
             <li key={issue.id}>
               <BoardCard
                 issue={issue}
-                projectKey={project.key}
                 pulse={pulseId === issue.id}
                 swipeDx={swipeHere?.dx}
                 swipeAnimating={swipeHere ? !swipeHere.active : true}

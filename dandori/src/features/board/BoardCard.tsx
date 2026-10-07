@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react'
 import type { Issue, Priority } from '../../db/types'
+import { formatIssueNumber } from '../../lib/issueNumber'
 
 const PRIORITY_COLOR: Record<Priority, string> = {
   urgent: '#ef4444',
@@ -10,7 +11,6 @@ const PRIORITY_COLOR: Record<Priority, string> = {
 
 interface Props {
   issue: Issue
-  projectKey: string
   floating?: CSSProperties
   swipeDx?: number
   swipeAnimating?: boolean
@@ -22,7 +22,6 @@ interface Props {
 
 export function BoardCard({
   issue,
-  projectKey,
   floating,
   swipeDx = 0,
   swipeAnimating = true,
@@ -55,7 +54,7 @@ export function BoardCard({
       }}
     >
       <span className="text-xs text-muted">
-        {projectKey}-{issue.number} · {issue.type}
+        {formatIssueNumber(issue.number)} · {issue.type}
         {issue.dueDate ? ` · 期限 ${issue.dueDate}` : ''}
       </span>
       <span className={issue.completedAt ? 'line-through opacity-60' : ''}>{issue.title}</span>

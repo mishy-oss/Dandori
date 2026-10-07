@@ -6,8 +6,6 @@ import * as sprintRepo from '../db/sprintRepo'
 import { DEFAULT_SETTINGS, type Issue, type Project, type Settings, type Sprint, type Workflow } from '../db/types'
 import { applyMove } from '../lib/issueOrder'
 
-const CURRENT_PROJECT_KEY = 'dandori:currentProject'
-
 export interface ScheduleChange {
   date: string | null
   startMin: number | null
@@ -27,13 +25,6 @@ interface DataState {
   updateSettings: (patch: Partial<Omit<Settings, 'id'>>) => Promise<void>
   scheduleIssue: (id: string, change: ScheduleChange) => Promise<void>
   toggleIssueDone: (id: string) => Promise<void>
-  selectProject: (id: string) => Promise<void>
-  createProject: (input: projectRepo.CreateProjectInput) => Promise<void>
-  updateProject: (
-    id: string,
-    patch: Parameters<typeof projectRepo.updateProject>[1],
-  ) => Promise<void>
-  deleteProject: (id: string) => Promise<void>
   createIssue: (input: Omit<issueRepo.CreateIssueInput, 'projectId'>) => Promise<Issue>
   updateIssue: (id: string, patch: issueRepo.IssuePatch) => Promise<void>
   moveIssue: (
@@ -54,28 +45,11 @@ interface DataState {
   assignIssueToSprint: (issueId: string, sprintId: string | null) => Promise<void>
 }
 
-function readCurrent(): string | null {
-  try {
-    return localStorage.getItem(CURRENT_PROJECT_KEY)
-  } catch {
-    return null
-  }
-}
-
-function writeCurrent(id: string | null) {
-  try {
-    if (id) localStorage.setItem(CURRENT_PROJECT_KEY, id)
-    else localStorage.removeItem(CURRENT_PROJECT_KEY)
-  } catch {
-    // 保存できなくても動作は継続する
-  }
-}
-
 export const useDataStore = create<DataState>((set, get) => {
-  async function reload(preferredProjectId?: string | null) {
+  // プロジェクトは内部的に1つだけ(UIには出さない)。複数ある旧データは最初の1つを使う
+  async function reload() {
     const projects = await projectRepo.listProjects()
-    const wanted = preferredProjectId ?? get().currentProjectId
-    const current = projects.find((p) => p.id === wanted) ?? projects[0] ?? null
+    const current = projects[0] ?? null
     const workflows: Record<string, Workflow> = {}
     for (const p of projects) {
       const w = await projectRepo.getWorkflow(p.workflowId)
@@ -84,7 +58,6 @@ export const useDataStore = create<DataState>((set, get) => {
     const issues = current ? await issueRepo.listIssues(current.id) : []
     const sprints = current ? await sprintRepo.listSprints(current.id) : []
     const settings = await settingsRepo.getSettings()
-    writeCurrent(current?.id ?? null)
     set({
       ready: true,
       settings,
@@ -98,7 +71,7 @@ export const useDataStore = create<DataState>((set, get) => {
 
   function requireProjectId(): string {
     const id = get().currentProjectId
-    if (!id) throw new Error('プロジェクトを作成してください')
+    if (!id) throw new Error('データの初期化が完了していません')
     return id
   }
 
@@ -114,9 +87,9 @@ export const useDataStore = create<DataState>((set, get) => {
     init: async () => {
       // 端末のストレージ削除対策。拒否されても動作に影響はない
       void navigator.storage?.persist?.()
-      await reload(readCurrent())
+      await projectRepo.ensureDefaultProject()
+      await reload()
     },
-    selectProject: (id) => reload(id),
     updateSettings: async (patch) => {
       await settingsRepo.updateSettings(patch)
       await reload()
@@ -157,18 +130,6 @@ export const useDataStore = create<DataState>((set, get) => {
       const target = workflow.statuses.find((s) => s.category === (isDone ? 'todo' : 'done'))
       if (!target) return
       await issueRepo.updateIssue(id, { statusId: target.id })
-      await reload()
-    },
-    createProject: async (input) => {
-      const p = await projectRepo.createProject(input)
-      await reload(p.id)
-    },
-    updateProject: async (id, patch) => {
-      await projectRepo.updateProject(id, patch)
-      await reload()
-    },
-    deleteProject: async (id) => {
-      await projectRepo.deleteProject(id)
       await reload()
     },
     createIssue: async (input) => {

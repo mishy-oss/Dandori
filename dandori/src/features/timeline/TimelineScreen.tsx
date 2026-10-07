@@ -103,18 +103,7 @@ export function TimelineScreen() {
     scroller.scrollTop = (target - rangeStart) * PX_PER_MIN
   }, [selected, ready, rangeStart])
 
-  if (!ready) return null
-
-  if (!project) {
-    return (
-      <section className="flex flex-col gap-4 p-4">
-        <h1 className="text-2xl font-bold">Today</h1>
-        <p className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted">
-          「設定」でプロジェクトを作成すると、タイムラインを使えます
-        </p>
-      </section>
-    )
-  }
+  if (!ready || !project) return null
 
   const title = format(parseISO(selected), 'M月d日(E)', { locale: ja })
   const nowLine = selected === today ? nowMin(now) : null
@@ -149,7 +138,6 @@ export function TimelineScreen() {
 
       <UnplacedTray
         issues={unplaced}
-        projectKey={project.key}
         drag={drag}
         hasSprint={sprint !== null}
         onOpen={(i) => setEditor({ issue: i })}
