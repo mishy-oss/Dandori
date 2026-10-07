@@ -91,6 +91,10 @@ export function TimelineScreen() {
       const i = issues.find((x) => x.id === id)
       if (i) void run(() => scheduleIssue(id, { date: i.date, startMin: i.startMin, durationMin }))
     },
+    onResizeTop: (id, startMin, durationMin) => {
+      const i = issues.find((x) => x.id === id)
+      if (i) void run(() => scheduleIssue(id, { date: i.date, startMin, durationMin }))
+    },
     onPlace: (id, startMin) => void run(() => scheduleIssue(id, { date: selected, startMin })),
   })
 

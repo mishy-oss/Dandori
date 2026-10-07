@@ -38,6 +38,9 @@ export function TimelineGrid({
   const shown = blocks.map((b) => {
     if (drag?.kind === 'move' && drag.id === b.id) return { issue: b, startMin: drag.startMin, durationMin: b.durationMin }
     if (drag?.kind === 'resize' && drag.id === b.id) return { issue: b, startMin: b.startMin!, durationMin: drag.durationMin }
+    if (drag?.kind === 'resize-top' && drag.id === b.id) {
+      return { issue: b, startMin: drag.startMin, durationMin: drag.durationMin }
+    }
     return { issue: b, startMin: b.startMin!, durationMin: b.durationMin }
   })
   const layout = new Map(
@@ -152,6 +155,15 @@ export function TimelineGrid({
                     </p>
                   )}
                 </div>
+              </div>
+              {/* 上端ハンドル。左端の完了ボタンには被せない */}
+              <div
+                data-resize-top-id={issue.id}
+                aria-hidden
+                className="absolute inset-x-0 left-7 top-0 flex touch-none items-start justify-center"
+                style={{ height: Math.min(16, Math.round(blockHeight * 0.35)) }}
+              >
+                <span className="mt-0.5 h-1 w-8 rounded-full bg-muted/60" />
               </div>
               <div
                 data-resize-id={issue.id}

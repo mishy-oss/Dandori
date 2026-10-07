@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   clampMove,
   clampResize,
+  clampResizeTop,
   formatMin,
   layoutBlocks,
   minToY,
@@ -37,6 +38,28 @@ describe('coordinates', () => {
     expect(clampResize(5, 600, range)).toBe(15)
     expect(clampResize(9999, 600, range)).toBe(840)
     expect(clampResize(50, 600, range)).toBe(45)
+  })
+
+  it('resizes from the top edge keeping the end fixed', () => {
+    const base = { startMin: 600, durationMin: 60 } // 10:00-11:00
+    // 上へ30分 -> 09:30-11:00
+    expect(clampResizeTop(570, base, range)).toEqual({ startMin: 570, durationMin: 90 })
+    // 下へ縮める
+    expect(clampResizeTop(630, base, range)).toEqual({ startMin: 630, durationMin: 30 })
+    // 動かさなければそのまま
+    expect(clampResizeTop(600, base, range)).toEqual({ startMin: 600, durationMin: 60 })
+    // 15分スナップ
+    expect(clampResizeTop(607, base, range)).toEqual({ startMin: 600, durationMin: 60 })
+    expect(clampResizeTop(608, base, range)).toEqual({ startMin: 615, durationMin: 45 })
+    // 最短15分: 終了の15分前まで
+    expect(clampResizeTop(900, base, range)).toEqual({ startMin: 645, durationMin: 15 })
+    // 表示範囲の上端(06:00)まで
+    expect(clampResizeTop(100, base, range)).toEqual({ startMin: 360, durationMin: 300 })
+    // 終了は常に不変
+    for (const s of [360, 420, 599, 640, 700]) {
+      const r = clampResizeTop(s, base, range)
+      expect(r.startMin + r.durationMin).toBe(660)
+    }
   })
 
   it('formats and parses times', () => {
