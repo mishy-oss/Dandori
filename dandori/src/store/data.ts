@@ -56,7 +56,12 @@ export const useDataStore = create<DataState>((set, get) => {
       if (w) workflows[w.id] = w
     }
     const issues = current ? await issueRepo.listIssues(current.id) : []
-    const sprints = current ? await sprintRepo.listSprints(current.id) : []
+    let sprints = current ? await sprintRepo.listSprints(current.id) : []
+    const activeSprint = sprints.find((s) => s.state === 'active')
+    if (activeSprint) {
+      await sprintRepo.recordSprintSnapshot(activeSprint.id)
+      sprints = await sprintRepo.listSprints(activeSprint.projectId)
+    }
     const settings = await settingsRepo.getSettings()
     set({
       ready: true,

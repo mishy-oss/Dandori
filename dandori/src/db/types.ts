@@ -92,6 +92,9 @@ export interface SprintSnapshot {
   date: string
   remainingMin: number
   remainingCount: number
+  /** Total sprint scope at the time of the snapshot; optional for existing stored snapshots. */
+  totalMin?: number
+  totalCount?: number
 }
 
 export interface Sprint {

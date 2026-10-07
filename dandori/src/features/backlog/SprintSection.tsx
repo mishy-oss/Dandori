@@ -1,4 +1,5 @@
 import type { Issue, Sprint } from '../../db/types'
+import { BurndownChart } from '../sprint/BurndownChart'
 import { BacklogRow } from './BacklogRow'
 
 const STATE_LABEL = { planned: '計画中', active: 'アクティブ', closed: '完了' } as const
@@ -6,6 +7,7 @@ const STATE_LABEL = { planned: '計画中', active: 'アクティブ', closed: '
 export function SprintSection({
   sprint,
   issues,
+  allIssues,
   allCount,
   doneCount,
   estimateMin,
@@ -22,6 +24,7 @@ export function SprintSection({
 }: {
   sprint: Sprint
   issues: Issue[]
+  allIssues: Issue[]
   allCount: number
   doneCount: number
   estimateMin: number
@@ -88,6 +91,10 @@ export function SprintSection({
         )}
       </header>
 
+      {(sprint.state === 'active' || (sprint.state === 'closed' && sprint.snapshots.length > 0)) && (
+        <BurndownChart sprint={sprint} issues={allIssues} doneIds={doneIds} />
+      )}
+
       {issues.length === 0 ? (
         <p className="rounded-lg border border-dashed border-border p-3 text-center text-xs text-muted">
           {filtered && allCount > 0
@@ -98,18 +105,22 @@ export function SprintSection({
         </p>
       ) : (
         <ul className="flex flex-col gap-2">
-          {issues.map((i) => (
-            <li key={i.id}>
+          {issues.map((i) => {
+            const children = allIssues.filter((child) => child.parentId === i.id)
+            return <li key={i.id}>
               <BacklogRow
                 issue={i}
                 done={doneIds.has(i.statusId)}
                 statusName={statusName(i.statusId)}
+                parentIssue={i.parentId ? allIssues.find((parent) => parent.id === i.parentId) : undefined}
+                childCount={children.length}
+                childDoneCount={children.filter((child) => doneIds.has(child.statusId)).length}
                 onOpen={() => onOpen(i)}
                 onMove={() => onMove(i)}
                 onToggleDone={() => onToggleDone(i)}
               />
             </li>
-          ))}
+          })}
         </ul>
       )}
     </section>
