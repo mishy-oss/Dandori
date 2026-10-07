@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import * as issueRepo from '../db/issueRepo'
 import * as projectRepo from '../db/projectRepo'
 import type { Issue, Project, Workflow } from '../db/types'
+import { applyMove } from '../lib/issueOrder'
 
 const CURRENT_PROJECT_KEY = 'dandori:currentProject'
 
@@ -22,6 +23,7 @@ interface DataState {
   deleteProject: (id: string) => Promise<void>
   createIssue: (input: Omit<issueRepo.CreateIssueInput, 'projectId'>) => Promise<Issue>
   updateIssue: (id: string, patch: issueRepo.IssuePatch) => Promise<void>
+  moveIssue: (id: string, statusId: string, index: number) => Promise<void>
   deleteIssue: (id: string) => Promise<void>
 }
 
@@ -96,6 +98,15 @@ export const useDataStore = create<DataState>((set, get) => {
     updateIssue: async (id, patch) => {
       await issueRepo.updateIssue(id, patch)
       await reload()
+    },
+    moveIssue: async (id, statusId, index) => {
+      // ドロップ直後に元の位置へ戻って見えないよう、保存前に画面だけ先に更新する
+      set({ issues: applyMove(get().issues, id, statusId, index) })
+      try {
+        await issueRepo.moveIssue(id, statusId, index)
+      } finally {
+        await reload()
+      }
     },
     deleteIssue: async (id) => {
       await issueRepo.deleteIssue(id)

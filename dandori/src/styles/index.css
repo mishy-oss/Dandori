@@ -27,6 +27,20 @@
 }
 
 @theme inline {
+  --animate-pop: pop 320ms ease-out;
+  @keyframes pop {
+    0% {
+      transform: scale(1);
+    }
+    40% {
+      transform: scale(1.04);
+      background-color: var(--surface-2);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+
   --color-bg: var(--bg);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
@@ -59,3 +73,4 @@ button {
   font: inherit;
   color: inherit;
 }
+

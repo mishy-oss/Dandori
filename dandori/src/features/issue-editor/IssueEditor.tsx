@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useMemo, useState, type FormEvent } from 'react'
 import { ISSUE_TYPES, PRIORITIES, type Issue, type IssueType, type Priority } from '../../db/types'
 import { selectCurrentProject, useDataStore } from '../../store/data'
 
@@ -7,9 +7,11 @@ const FIELD =
 
 export function IssueEditor({
   issue,
+  defaultStatusId,
   onClose,
 }: {
   issue: Issue | null
+  defaultStatusId?: string
   onClose: () => void
 }) {
   const project = useDataStore(selectCurrentProject)
@@ -17,14 +19,32 @@ export function IssueEditor({
   const createIssue = useDataStore((s) => s.createIssue)
   const updateIssue = useDataStore((s) => s.updateIssue)
   const deleteIssue = useDataStore((s) => s.deleteIssue)
+  const moveIssue = useDataStore((s) => s.moveIssue)
+  const issues = useDataStore((s) => s.issues)
+  const column = useMemo(
+    () => (issue ? issues.filter((i) => i.statusId === issue.statusId) : []),
+    [issues, issue],
+  )
+  const position = issue ? column.findIndex((i) => i.id === issue.id) : -1
 
   const [title, setTitle] = useState(issue?.title ?? '')
   const [description, setDescription] = useState(issue?.description ?? '')
   const [type, setType] = useState<IssueType>(issue?.type ?? 'task')
   const [priority, setPriority] = useState<Priority>(issue?.priority ?? 'medium')
-  const [statusId, setStatusId] = useState(issue?.statusId ?? workflow?.statuses[0]?.id ?? '')
+  const [statusId, setStatusId] = useState(
+    issue?.statusId ?? defaultStatusId ?? workflow?.statuses[0]?.id ?? '',
+  )
   const [dueDate, setDueDate] = useState(issue?.dueDate ?? '')
   const [error, setError] = useState<string | null>(null)
+
+  async function reorder(delta: -1 | 1) {
+    if (!issue) return
+    try {
+      await moveIssue(issue.id, issue.statusId, position + delta)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
 
   async function run(action: () => Promise<unknown>) {
     try {
@@ -123,6 +143,32 @@ export function IssueEditor({
             />
           </label>
         </div>
+
+        {issue && column.length > 1 && (
+          <div className="flex items-center gap-2">
+            <span className="flex-1 text-sm text-muted">
+              列内の並び順({position + 1}/{column.length})
+            </span>
+            <button
+              type="button"
+              aria-label="列内で上へ移動"
+              disabled={position <= 0}
+              onClick={() => void reorder(-1)}
+              className="min-h-11 min-w-11 rounded-lg border border-border disabled:opacity-40"
+            >
+              ↑
+            </button>
+            <button
+              type="button"
+              aria-label="列内で下へ移動"
+              disabled={position < 0 || position >= column.length - 1}
+              onClick={() => void reorder(1)}
+              className="min-h-11 min-w-11 rounded-lg border border-border disabled:opacity-40"
+            >
+              ↓
+            </button>
+          </div>
+        )}
 
         {error && (
           <p role="alert" className="text-sm text-red-500">

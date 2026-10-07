@@ -1,6 +1,6 @@
 import { db } from './db'
 import { newId, now } from '../lib/id'
-import { rankAfter } from '../lib/rank'
+import { compareRank, rankAfter, rankBetween, ranksForCount } from '../lib/rank'
 import { getProject, getWorkflow } from './projectRepo'
 import type { Issue, IssueType, Priority } from './types'
 
@@ -46,7 +46,7 @@ export async function listIssues(projectId: string): Promise<Issue[]> {
   const all = await db.issues.where('projectId').equals(projectId).toArray()
   return all
     .filter((i) => i.deletedAt === null)
-    .sort((a, b) => (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0))
+    .sort(compareRank)
 }
 
 export async function getIssue(id: string): Promise<Issue | undefined> {
@@ -149,6 +149,54 @@ export async function updateIssue(
 
     await db.issues.put(next)
     return next
+  })
+}
+
+// ステータス列 statusId の index 番目(自分自身を除く)へ移動する。スケジュール(date/startMin)には触れない
+export async function moveIssue(
+  id: string,
+  statusId: string,
+  index: number,
+): Promise<Issue> {
+  return db.transaction('rw', db.projects, db.workflows, db.issues, async () => {
+    const current = await getIssue(id)
+    if (!current) throw new Error('Issueが見つかりません')
+    const project = await getProject(current.projectId)
+    const workflow = project && (await getWorkflow(project.workflowId))
+    const status = workflow?.statuses.find((s) => s.id === statusId)
+    if (!status) throw new Error('ステータスが見つかりません')
+
+    const t = now()
+    const others = activeInStatus(
+      await db.issues.where('projectId').equals(current.projectId).toArray(),
+      statusId,
+    )
+      .filter((i) => i.id !== id)
+      .sort(compareRank)
+    const at = Math.max(0, Math.min(index, others.length))
+
+    let prev = at > 0 ? others[at - 1].rank : null
+    let next = at < others.length ? others[at].rank : null
+    if (prev !== null && next !== null && prev >= next) {
+      const ranks = ranksForCount(others.length)
+      await Promise.all(
+        others.map((o, i) => db.issues.update(o.id, { rank: ranks[i], updatedAt: t })),
+      )
+      prev = at > 0 ? ranks[at - 1] : null
+      next = at < others.length ? ranks[at] : null
+    }
+
+    const keepCompletedAt = current.statusId === statusId && current.completedAt !== null
+    const moved: Issue = {
+      ...current,
+      statusId,
+      rank: rankBetween(prev, next),
+      completedAt:
+        status.category === 'done' ? (keepCompletedAt ? current.completedAt : t) : null,
+      updatedAt: t,
+    }
+    await db.issues.put(moved)
+    return moved
   })
 }
 

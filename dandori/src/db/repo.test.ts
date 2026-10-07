@@ -5,6 +5,7 @@ import {
   deleteIssue,
   getIssue,
   listIssues,
+  moveIssue,
   updateIssue,
 } from './issueRepo'
 import {
@@ -147,5 +148,63 @@ describe('issue', () => {
     expect((await listIssues(p.id)).map((i) => i.id)).toEqual([other.id])
     expect(await getIssue(subsub.id)).toBeUndefined()
     expect(await db.issues.count()).toBe(4)
+  })
+})
+
+describe('moveIssue', () => {
+  async function setup() {
+    const p = await createProject({ key: 'APP', name: 'App' })
+    const [todo, doing, done] = (await getWorkflow(p.workflowId))!.statuses
+    const a = await createIssue({ projectId: p.id, title: 'a' })
+    const b = await createIssue({ projectId: p.id, title: 'b' })
+    const c = await createIssue({ projectId: p.id, title: 'c' })
+    return { p, todo, doing, done, a, b, c }
+  }
+  const titles = async (projectId: string, statusId: string) =>
+    (await listIssues(projectId)).filter((i) => i.statusId === statusId).map((i) => i.title)
+
+  it('reorders within a column', async () => {
+    const { p, todo, a, b, c } = await setup()
+    await moveIssue(c.id, todo.id, 0)
+    expect(await titles(p.id, todo.id)).toEqual(['c', 'a', 'b'])
+    await moveIssue(a.id, todo.id, 2)
+    expect(await titles(p.id, todo.id)).toEqual(['c', 'b', 'a'])
+    await moveIssue(b.id, todo.id, 99)
+    expect(await titles(p.id, todo.id)).toEqual(['c', 'a', 'b'])
+  })
+
+  it('moves across columns and manages completedAt and schedule', async () => {
+    const { p, todo, doing, done, a, b } = await setup()
+    await updateIssue(a.id, { date: '2026-10-07', startMin: 540 })
+
+    await moveIssue(a.id, doing.id, 0)
+    await moveIssue(b.id, doing.id, 0)
+    expect(await titles(p.id, doing.id)).toEqual(['b', 'a'])
+    expect(await titles(p.id, todo.id)).toEqual(['c'])
+
+    const d = await moveIssue(a.id, done.id, 0)
+    expect(d.completedAt).not.toBeNull()
+    expect(d).toMatchObject({ date: '2026-10-07', startMin: 540 })
+
+    const stamp = d.completedAt
+    expect((await moveIssue(a.id, done.id, 0)).completedAt).toBe(stamp)
+    expect((await moveIssue(a.id, todo.id, 0)).completedAt).toBeNull()
+  })
+
+  it('repairs colliding ranks in a column', async () => {
+    const { p, todo, a, b, c } = await setup()
+    await db.issues.bulkUpdate([a, b, c].map((i) => ({ key: i.id, changes: { rank: 'a0' } })))
+    await moveIssue(c.id, todo.id, 1)
+    const ranks = (await listIssues(p.id)).map((i) => i.rank)
+    expect(new Set(ranks).size).toBe(3)
+    const column = await titles(p.id, todo.id)
+    expect(column).toHaveLength(3)
+    expect(column[1]).toBe('c')
+  })
+
+  it('rejects unknown issues and statuses', async () => {
+    const { todo, a } = await setup()
+    await expect(moveIssue('nope', todo.id, 0)).rejects.toThrow()
+    await expect(moveIssue(a.id, 'bad', 0)).rejects.toThrow()
   })
 })
