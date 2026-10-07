@@ -69,6 +69,25 @@ export const PRIORITIES: Priority[] = ['low', 'medium', 'high', 'urgent']
 
 export type SprintState = 'planned' | 'active' | 'closed'
 
+// テーマは初回描画前に適用する必要があるため localStorage に保存し、ここには含めない
+export interface Settings {
+  id: 'main'
+  dayStartHour: number
+  dayEndHour: number
+  defaultDuration: number
+  weekStartsOn: 0 | 1
+  lastBackupAt: number | null
+}
+
+export const DEFAULT_SETTINGS: Settings = {
+  id: 'main',
+  dayStartHour: 6,
+  dayEndHour: 24,
+  defaultDuration: 30,
+  weekStartsOn: 1,
+  lastBackupAt: null,
+}
+
 export interface SprintSnapshot {
   date: string
   remainingMin: number

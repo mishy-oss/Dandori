@@ -1,6 +1,7 @@
 import { Screen } from '../../app/Screen'
 import { useThemeStore, type ThemeSetting } from '../../store/theme'
 import { ProjectSection } from './ProjectSection'
+import { TimelineSettingsSection } from './TimelineSettingsSection'
 
 const OPTIONS: { value: ThemeSetting; label: string }[] = [
   { value: 'system', label: 'システム' },
@@ -15,6 +16,7 @@ export function SettingsScreen() {
   return (
     <Screen title="設定">
       <ProjectSection />
+      <TimelineSettingsSection />
       <div className="rounded-xl border border-border bg-surface p-4">
         <h2 className="mb-3 text-sm font-semibold text-muted">テーマ</h2>
         <div role="radiogroup" aria-label="テーマ" className="grid grid-cols-3 gap-2">

@@ -1,6 +1,7 @@
 import { db } from './db'
 import { newId, now } from '../lib/id'
 import { compareRank, rankAfter, rankBetween, ranksForCount } from '../lib/rank'
+import { validateSchedule } from '../lib/schedule'
 import { getProject, getWorkflow } from './projectRepo'
 import { getSprint } from './sprintRepo'
 import type { Issue, IssueType, Priority } from './types'
@@ -17,6 +18,9 @@ export interface CreateIssueInput {
   dueDate?: string | null
   estimateMin?: number | null
   sprintId?: string | null
+  date?: string | null
+  startMin?: number | null
+  durationMin?: number
 }
 
 export type IssuePatch = Partial<
@@ -85,6 +89,8 @@ export async function createIssue(input: CreateIssueInput): Promise<Issue> {
       }
     }
 
+    validateSchedule(input.date ?? null, input.startMin ?? null, input.durationMin ?? DEFAULT_DURATION_MIN)
+
     const t = now()
     const issue: Issue = {
       id: newId(),
@@ -101,9 +107,9 @@ export async function createIssue(input: CreateIssueInput): Promise<Issue> {
       estimateMin: input.estimateMin ?? null,
       sprintId: input.sprintId ?? null,
       rank: await nextRankInStatus(project.id, statusId),
-      date: null,
-      startMin: null,
-      durationMin: DEFAULT_DURATION_MIN,
+      date: input.date ?? null,
+      startMin: input.startMin ?? null,
+      durationMin: input.durationMin ?? DEFAULT_DURATION_MIN,
       icon: '',
       color: project.color,
       reminderOffsetMin: null,
@@ -144,6 +150,7 @@ export async function updateIssue(
       ...(title !== undefined && { title }),
       updatedAt: t,
     }
+    validateSchedule(next.date, next.startMin, next.durationMin)
 
     // ステータスとスケジュールは独立。ステータス変更時は完了日時と列内の並びだけ更新する
     if (patch.statusId !== undefined && patch.statusId !== current.statusId) {

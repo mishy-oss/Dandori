@@ -1,14 +1,22 @@
 import { create } from 'zustand'
 import * as issueRepo from '../db/issueRepo'
 import * as projectRepo from '../db/projectRepo'
+import * as settingsRepo from '../db/settingsRepo'
 import * as sprintRepo from '../db/sprintRepo'
-import type { Issue, Project, Sprint, Workflow } from '../db/types'
+import { DEFAULT_SETTINGS, type Issue, type Project, type Settings, type Sprint, type Workflow } from '../db/types'
 import { applyMove } from '../lib/issueOrder'
 
 const CURRENT_PROJECT_KEY = 'dandori:currentProject'
 
+export interface ScheduleChange {
+  date: string | null
+  startMin: number | null
+  durationMin?: number
+}
+
 interface DataState {
   ready: boolean
+  settings: Settings
   projects: Project[]
   workflows: Record<string, Workflow>
   currentProjectId: string | null
@@ -16,6 +24,9 @@ interface DataState {
   sprints: Sprint[]
 
   init: () => Promise<void>
+  updateSettings: (patch: Partial<Omit<Settings, 'id'>>) => Promise<void>
+  scheduleIssue: (id: string, change: ScheduleChange) => Promise<void>
+  toggleIssueDone: (id: string) => Promise<void>
   selectProject: (id: string) => Promise<void>
   createProject: (input: projectRepo.CreateProjectInput) => Promise<void>
   updateProject: (
@@ -72,8 +83,17 @@ export const useDataStore = create<DataState>((set, get) => {
     }
     const issues = current ? await issueRepo.listIssues(current.id) : []
     const sprints = current ? await sprintRepo.listSprints(current.id) : []
+    const settings = await settingsRepo.getSettings()
     writeCurrent(current?.id ?? null)
-    set({ ready: true, projects, workflows, currentProjectId: current?.id ?? null, issues, sprints })
+    set({
+      ready: true,
+      settings,
+      projects,
+      workflows,
+      currentProjectId: current?.id ?? null,
+      issues,
+      sprints,
+    })
   }
 
   function requireProjectId(): string {
@@ -84,6 +104,7 @@ export const useDataStore = create<DataState>((set, get) => {
 
   return {
     ready: false,
+    settings: DEFAULT_SETTINGS,
     projects: [],
     workflows: {},
     currentProjectId: null,
@@ -96,6 +117,48 @@ export const useDataStore = create<DataState>((set, get) => {
       await reload(readCurrent())
     },
     selectProject: (id) => reload(id),
+    updateSettings: async (patch) => {
+      await settingsRepo.updateSettings(patch)
+      await reload()
+    },
+    scheduleIssue: async (id, change) => {
+      // ドロップ直後に元の位置へ戻って見えないよう、保存前に画面だけ先に更新する
+      set({
+        issues: get().issues.map((i) =>
+          i.id === id
+            ? {
+                ...i,
+                date: change.date,
+                startMin: change.startMin,
+                durationMin: change.durationMin ?? i.durationMin,
+              }
+            : i,
+        ),
+      })
+      try {
+        await issueRepo.updateIssue(id, {
+          date: change.date,
+          startMin: change.startMin,
+          ...(change.durationMin !== undefined && { durationMin: change.durationMin }),
+        })
+      } finally {
+        await reload()
+      }
+    },
+    // タイムライン上で完了にしたら done カテゴリへ、戻したら最初の todo カテゴリへ移す
+    toggleIssueDone: async (id) => {
+      const { issues, projects, workflows } = get()
+      const issue = issues.find((i) => i.id === id)
+      const project = issue && projects.find((p) => p.id === issue.projectId)
+      const workflow = project && workflows[project.workflowId]
+      if (!issue || !workflow) return
+      const isDone =
+        workflow.statuses.find((s) => s.id === issue.statusId)?.category === 'done'
+      const target = workflow.statuses.find((s) => s.category === (isDone ? 'todo' : 'done'))
+      if (!target) return
+      await issueRepo.updateIssue(id, { statusId: target.id })
+      await reload()
+    },
     createProject: async (input) => {
       const p = await projectRepo.createProject(input)
       await reload(p.id)
