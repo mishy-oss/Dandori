@@ -11,6 +11,7 @@ import {
 import {
   createProject,
   deleteProject,
+  ensureDefaultProject,
   getWorkflow,
   listProjects,
   updateProject,
@@ -57,6 +58,20 @@ describe('project / workflow', () => {
     const p = await createProject({ key: 'APP', name: 'App' })
     await deleteProject(p.id)
     await expect(createProject({ key: 'APP', name: 'New' })).resolves.toBeTruthy()
+  })
+
+  it('ensures exactly one default project, even when called concurrently', async () => {
+    const [a, b] = await Promise.all([ensureDefaultProject(), ensureDefaultProject()])
+    expect(a.id).toBe(b.id)
+    expect(await listProjects()).toHaveLength(1)
+    expect(a).toMatchObject({ key: 'TASK', name: 'Dandori' })
+    expect((await ensureDefaultProject()).id).toBe(a.id)
+  })
+
+  it('keeps an existing project instead of creating a default one', async () => {
+    const p = await createProject({ key: 'APP', name: 'App' })
+    expect((await ensureDefaultProject()).id).toBe(p.id)
+    expect(await listProjects()).toHaveLength(1)
   })
 
   it('validates workflow edits', async () => {

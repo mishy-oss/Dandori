@@ -1,4 +1,6 @@
+import { DoneCheckButton } from '../../app/DoneCheckButton'
 import type { Issue, Priority } from '../../db/types'
+import { formatIssueNumber } from '../../lib/issueNumber'
 import { useRowGestures } from './useRowGestures'
 
 const PRIORITY_COLOR: Record<Priority, string> = {
@@ -10,16 +12,18 @@ const PRIORITY_COLOR: Record<Priority, string> = {
 
 export function BacklogRow({
   issue,
-  projectKey,
+  done,
   statusName,
   onOpen,
   onMove,
+  onToggleDone,
 }: {
   issue: Issue
-  projectKey: string
+  done: boolean
   statusName: string
   onOpen: () => void
   onMove: () => void
+  onToggleDone: () => void
 }) {
   const { dx, swiping, onPointerDown, shouldSuppressClick } = useRowGestures(onMove)
 
@@ -42,24 +46,27 @@ export function BacklogRow({
           if (!shouldSuppressClick()) onOpen()
         }}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
+          if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
             e.preventDefault()
             onOpen()
           }
         }}
-        className="relative flex min-h-14 touch-pan-y select-none flex-col items-start gap-1 rounded-xl border border-border bg-surface p-3 pl-4 text-left [-webkit-touch-callout:none]"
+        className="relative flex min-h-14 touch-pan-y select-none items-center gap-1 rounded-xl border border-border bg-surface py-1 pl-1 pr-3 text-left [-webkit-touch-callout:none]"
         style={{
           borderLeft: `4px solid ${PRIORITY_COLOR[issue.priority]}`,
           transform: dx ? `translateX(${dx}px)` : undefined,
           transition: swiping ? 'none' : 'transform 160ms ease-out',
         }}
       >
-        <span className="text-xs text-muted">
-          {projectKey}-{issue.number} · {issue.type} · {issue.priority}
-          {issue.estimateMin ? ` · ${issue.estimateMin}分` : ''}
-        </span>
-        <span className={issue.completedAt ? 'line-through opacity-60' : ''}>{issue.title}</span>
-        <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs">{statusName}</span>
+        <DoneCheckButton done={done} onToggle={onToggleDone} />
+        <div className="flex min-w-0 flex-1 flex-col items-start gap-1">
+          <span className="text-xs text-muted">
+            {formatIssueNumber(issue.number)} · {issue.type} · {issue.priority}
+            {issue.estimateMin ? ` · ${issue.estimateMin}分` : ''}
+          </span>
+          <span className={done ? 'line-through opacity-60' : ''}>{issue.title}</span>
+          <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs">{statusName}</span>
+        </div>
       </div>
     </div>
   )

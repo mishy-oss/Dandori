@@ -1,17 +1,16 @@
 import { useState } from 'react'
 import { Sheet } from '../../app/Sheet'
 import type { Issue, Sprint } from '../../db/types'
+import { formatIssueNumber } from '../../lib/issueNumber'
 import { useDataStore } from '../../store/data'
 
 export function MoveSheet({
   issue,
   sprints,
-  projectKey,
   onClose,
 }: {
   issue: Issue
   sprints: Sprint[]
-  projectKey: string
   onClose: () => void
 }) {
   const assign = useDataStore((s) => s.assignIssueToSprint)
@@ -31,7 +30,7 @@ export function MoveSheet({
   return (
     <Sheet label="移動先を選択" onClose={onClose}>
       <h2 className="text-lg font-bold">
-        {projectKey}-{issue.number} の移動先
+        {formatIssueNumber(issue.number)} の移動先
       </h2>
       <p className="-mt-2 truncate text-sm text-muted">{issue.title}</p>
       <ul className="flex flex-col gap-2">

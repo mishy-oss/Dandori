@@ -1,5 +1,7 @@
 import type { CSSProperties } from 'react'
+import { DoneCheckButton } from '../../app/DoneCheckButton'
 import type { Issue, Priority } from '../../db/types'
+import { formatIssueNumber } from '../../lib/issueNumber'
 
 const PRIORITY_COLOR: Record<Priority, string> = {
   urgent: '#ef4444',
@@ -10,7 +12,7 @@ const PRIORITY_COLOR: Record<Priority, string> = {
 
 interface Props {
   issue: Issue
-  projectKey: string
+  done: boolean
   floating?: CSSProperties
   swipeDx?: number
   swipeAnimating?: boolean
@@ -18,11 +20,12 @@ interface Props {
   prevLabel?: string
   nextLabel?: string
   onOpen: () => void
+  onToggleDone: () => void
 }
 
 export function BoardCard({
   issue,
-  projectKey,
+  done,
   floating,
   swipeDx = 0,
   swipeAnimating = true,
@@ -30,6 +33,7 @@ export function BoardCard({
   prevLabel,
   nextLabel,
   onOpen,
+  onToggleDone,
 }: Props) {
   const card = (
     <div
@@ -38,12 +42,12 @@ export function BoardCard({
       data-card-id={issue.id}
       onClick={onOpen}
       onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
+        if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
           e.preventDefault()
           onOpen()
         }
       }}
-      className={`relative flex min-h-16 touch-pan-y select-none flex-col gap-1 rounded-xl border border-border bg-surface p-3 pl-4 [-webkit-touch-callout:none] ${
+      className={`relative flex min-h-16 touch-pan-y select-none items-center gap-1 rounded-xl border border-border bg-surface py-1 pl-1 pr-3 [-webkit-touch-callout:none] ${
         pulse ? 'animate-pop' : ''
       } ${floating ? 'z-50 scale-[1.03] shadow-2xl' : ''}`}
       style={{
@@ -54,11 +58,14 @@ export function BoardCard({
         borderLeft: `4px solid ${PRIORITY_COLOR[issue.priority]}`,
       }}
     >
-      <span className="text-xs text-muted">
-        {projectKey}-{issue.number} · {issue.type}
-        {issue.dueDate ? ` · 期限 ${issue.dueDate}` : ''}
-      </span>
-      <span className={issue.completedAt ? 'line-through opacity-60' : ''}>{issue.title}</span>
+      <DoneCheckButton done={done} onToggle={onToggleDone} />
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <span className="text-xs text-muted">
+          {formatIssueNumber(issue.number)} · {issue.type}
+          {issue.dueDate ? ` · 期限 ${issue.dueDate}` : ''}
+        </span>
+        <span className={done ? 'line-through opacity-60' : ''}>{issue.title}</span>
+      </div>
     </div>
   )
 

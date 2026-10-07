@@ -16,6 +16,7 @@ export function BoardScreen() {
   const sprint = useDataStore(selectActiveSprint)
   const ready = useDataStore((s) => s.ready)
   const moveIssue = useDataStore((s) => s.moveIssue)
+  const toggleIssueDone = useDataStore((s) => s.toggleIssueDone)
 
   const issues = useMemo(
     () => (sprint ? allIssues.filter((i) => i.sprintId === sprint.id) : []),
@@ -28,6 +29,10 @@ export function BoardScreen() {
   const listRef = useRef<HTMLUListElement>(null)
 
   const statuses = useMemo(() => workflow?.statuses ?? [], [workflow])
+  const doneIds = useMemo(
+    () => new Set(statuses.filter((s) => s.category === 'done').map((s) => s.id)),
+    [statuses],
+  )
   const activeIndex = Math.min(columnIndex, Math.max(statuses.length - 1, 0))
   const active = statuses[activeIndex]
 
@@ -36,6 +41,18 @@ export function BoardScreen() {
     const t = setTimeout(() => setPulseId(null), 400)
     return () => clearTimeout(t)
   }, [pulseId])
+
+  // 完了にすると Done 系の列の末尾へ、戻すと To Do 系の列へ移る。移動先のタブをバウンスさせて知らせる
+  async function toggleDone(issueId: string) {
+    try {
+      setError(null)
+      await toggleIssueDone(issueId)
+      const moved = useDataStore.getState().issues.find((i) => i.id === issueId)
+      if (moved) setPulseId(`tab:${moved.statusId}`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
 
   async function move(issueId: string, statusIdx: number, index: number) {
     const status = statuses[statusIdx]
@@ -62,26 +79,12 @@ export function BoardScreen() {
     onDrop: (id, col, index) => void move(id, col, index),
   })
 
-  if (!ready) return null
-
-  if (!project || !active) {
-    return (
-      <section className="flex flex-col gap-4 p-4">
-        <h1 className="text-2xl font-bold">Board</h1>
-        <p className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted">
-          「設定」でプロジェクトを作成すると、ボードを使えます
-        </p>
-      </section>
-    )
-  }
+  if (!ready || !project || !active) return null
 
   if (!sprint) {
     return (
       <section className="flex flex-col gap-4 p-4">
-        <div>
-          <h1 className="text-2xl font-bold">Board</h1>
-          <p className="text-sm text-muted">{project.name}</p>
-        </div>
+        <h1 className="text-2xl font-bold">Board</h1>
         <p className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted">
           アクティブなスプリントがありません。Backlog でスプリントにIssueを追加して開始してください
         </p>
@@ -117,7 +120,7 @@ export function BoardScreen() {
       <div>
         <h1 className="text-2xl font-bold">Board</h1>
         <p className="text-sm text-muted">
-          {project.name} · {sprint.name}({sprint.startDate} 〜 {sprint.endDate})
+          {sprint.name}({sprint.startDate} 〜 {sprint.endDate})
         </p>
       </div>
 
@@ -135,7 +138,7 @@ export function BoardScreen() {
               onClick={() => setColumnIndex(i)}
               className={`flex min-h-11 shrink-0 items-center gap-2 rounded-full border px-4 text-sm ${
                 i === activeIndex ? 'border-accent bg-accent text-accent-text' : 'border-border bg-surface'
-              }`}
+              } ${pulseId === `tab:${s.id}` ? 'animate-pop' : ''}`}
             >
               {s.name}
               <span
@@ -191,7 +194,7 @@ export function BoardScreen() {
             <li key={issue.id}>
               <BoardCard
                 issue={issue}
-                projectKey={project.key}
+                done={doneIds.has(issue.statusId)}
                 pulse={pulseId === issue.id}
                 swipeDx={swipeHere?.dx}
                 swipeAnimating={swipeHere ? !swipeHere.active : true}
@@ -210,6 +213,7 @@ export function BoardScreen() {
                 onOpen={() => {
                   if (!shouldSuppressClick()) setEditing(issue)
                 }}
+                onToggleDone={() => void toggleDone(issue.id)}
               />
             </li>
           )

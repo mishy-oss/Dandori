@@ -101,6 +101,7 @@ export function useBoardGestures(options: Options) {
       if (session.current) return
       if (e.pointerType === 'mouse' && e.button !== 0) return
       const el = (e.target as HTMLElement).closest<HTMLElement>('[data-card-id]')
+      if ((e.target as HTMLElement).closest('[data-no-drag]')) return
       const issueId = el?.dataset.cardId
       if (!el || !issueId) return
 

@@ -1,5 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { ISSUE_TYPES, PRIORITIES, type Issue, type IssueType, type Priority } from '../../db/types'
+import { formatIssueNumber } from '../../lib/issueNumber'
 import { selectCurrentProject, useDataStore } from '../../store/data'
 import { formatMin, parseTime } from '../timeline/timelineLogic'
 
@@ -113,7 +114,7 @@ export function IssueEditor({
         style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 16px)' }}
       >
         <h2 className="text-lg font-bold">
-          {issue && project ? `${project.key}-${issue.number}` : '新規Issue'}
+          {issue ? formatIssueNumber(issue.number) : '新規Issue'}
         </h2>
 
         <label className="flex flex-col gap-1 text-sm text-muted">
