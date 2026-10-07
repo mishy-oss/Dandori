@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react'
-import { PX_PER_MIN, clampMove, clampResize, yToMin, type Range } from './timelineLogic'
+import { PX_PER_MIN, clampMove, clampResize, clampResizeTop, yToMin, type Range } from './timelineLogic'
 
 const LONG_PRESS_MS = 350
 const MOVE_TOLERANCE_PX = 8
@@ -10,6 +10,7 @@ const AUTOSCROLL_STEP_PX = 10
 export type TimelineDrag =
   | { kind: 'move'; id: string; startMin: number }
   | { kind: 'resize'; id: string; durationMin: number }
+  | { kind: 'resize-top'; id: string; startMin: number; durationMin: number }
   | { kind: 'tray'; id: string; x: number; y: number; startMin: number | null }
 
 export interface TimedBlock {
@@ -26,11 +27,12 @@ interface Options {
   getTrayDuration: (id: string) => number
   onMove: (id: string, startMin: number) => void
   onResize: (id: string, durationMin: number) => void
+  onResizeTop: (id: string, startMin: number, durationMin: number) => void
   onPlace: (id: string, startMin: number) => void
 }
 
 interface Session {
-  kind: 'move' | 'resize' | 'tray'
+  kind: 'move' | 'resize' | 'resize-top' | 'tray'
   id: string
   pointerId: number
   startX: number
@@ -45,9 +47,9 @@ interface Session {
   raf: number | null
 }
 
-// ブロックの長押しドラッグ(15分スナップ)、下端ドラッグでの所要時間変更、未配置リストからのドラッグ配置。
+// ブロックの長押しドラッグ(15分スナップ)、上端/下端ドラッグでの所要時間変更、未配置リストからのドラッグ配置。
 // ブロック本体は縦スクロールをブラウザに任せ(touch-action: pan-y)、長押し成立後だけ touchmove を止める。
-// 下端ハンドルは touch-action: none で、掴んだらすぐ操作できる
+// 上端・下端ハンドルは touch-action: none で、掴んだらすぐ操作できる
 export function useTimelineGestures(options: Options) {
   const optionsRef = useRef(options)
   useEffect(() => {
@@ -103,6 +105,9 @@ export function useTimelineGestures(options: Options) {
         durationMin: clampResize(s.base.durationMin + deltaMin, s.base.startMin, range),
       }
     }
+    if (s.kind === 'resize-top' && s.base) {
+      return { kind: 'resize-top', id: s.id, ...clampResizeTop(s.base.startMin + deltaMin, s.base, range) }
+    }
     const grid = gridRef.current?.getBoundingClientRect()
     const scroller = scrollerRef.current?.getBoundingClientRect()
     let startMin: number | null = null
@@ -127,11 +132,25 @@ export function useTimelineGestures(options: Options) {
       if (target.closest('[data-no-drag]')) return
 
       const resizeEl = target.closest<HTMLElement>('[data-resize-id]')
+      const resizeTopEl = target.closest<HTMLElement>('[data-resize-top-id]')
       const blockEl = target.closest<HTMLElement>('[data-block-id]')
       const trayEl = target.closest<HTMLElement>('[data-tray-id]')
-      const kind = resizeEl ? 'resize' : blockEl ? 'move' : trayEl ? 'tray' : null
-      const id = resizeEl?.dataset.resizeId ?? blockEl?.dataset.blockId ?? trayEl?.dataset.trayId
+      const kind = resizeEl
+        ? 'resize'
+        : resizeTopEl
+          ? 'resize-top'
+          : blockEl
+            ? 'move'
+            : trayEl
+              ? 'tray'
+              : null
+      const id =
+        resizeEl?.dataset.resizeId ??
+        resizeTopEl?.dataset.resizeTopId ??
+        blockEl?.dataset.blockId ??
+        trayEl?.dataset.trayId
       if (!kind || !id) return
+      const isHandle = kind === 'resize' || kind === 'resize-top'
 
       const base = kind === 'tray' ? null : (optionsRef.current.getBlock(id) ?? null)
       if (kind !== 'tray' && !base) return
@@ -181,8 +200,8 @@ export function useTimelineGestures(options: Options) {
         s.timer = null
         if (session.current !== s || s.active) return
         s.active = true
-        // リサイズは動かさずに離した場合タップ扱い(ブロックを開く)にするため、移動が確認できるまで gestured にしない
-        if (s.kind !== 'resize') gestured.current = true
+        // ハンドルは動かさずに離した場合タップ扱い(ブロックを開く)にするため、移動が確認できるまで gestured にしない
+        if (!isHandle) gestured.current = true
         blockScroll.current = true
         s.scrollTop0 = optionsRef.current.scrollerRef.current?.scrollTop ?? 0
         s.startY = s.y
@@ -202,7 +221,7 @@ export function useTimelineGestures(options: Options) {
           }
           return
         }
-        if (s.kind === 'resize' && dist > RESIZE_TAP_TOLERANCE_PX) {
+        if (isHandle && dist > RESIZE_TAP_TOLERANCE_PX) {
           s.moved = true
           gestured.current = true
         }
@@ -212,7 +231,7 @@ export function useTimelineGestures(options: Options) {
       function onUp(ev: PointerEvent) {
         if (ev.pointerId !== s.pointerId) return
         const wasActive = s.active
-        const result = wasActive && (s.kind !== 'resize' || s.moved) ? compute(s) : null
+        const result = wasActive && (!isHandle || s.moved) ? compute(s) : null
         finish()
         publish(null)
         if (wasActive) setTimeout(() => (gestured.current = false), 0)
@@ -220,6 +239,7 @@ export function useTimelineGestures(options: Options) {
         const o = optionsRef.current
         if (result.kind === 'move') o.onMove(result.id, result.startMin)
         else if (result.kind === 'resize') o.onResize(result.id, result.durationMin)
+        else if (result.kind === 'resize-top') o.onResizeTop(result.id, result.startMin, result.durationMin)
         else if (result.startMin !== null) o.onPlace(result.id, result.startMin)
       }
 
@@ -234,7 +254,7 @@ export function useTimelineGestures(options: Options) {
       window.addEventListener('pointerup', onUp)
       window.addEventListener('pointercancel', onCancel)
 
-      if (kind === 'resize') activate()
+      if (isHandle) activate()
       else s.timer = window.setTimeout(activate, LONG_PRESS_MS)
     },
     [compute, publish],

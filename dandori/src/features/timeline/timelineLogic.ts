@@ -75,6 +75,18 @@ export function clampResize(durationMin: number, startMin: number, range: Range)
   return clamp(snap(durationMin), MIN_BLOCK_DURATION_MIN, max)
 }
 
+// 上端ドラッグ: 元のブロックの終了時刻を固定したまま、開始時刻だけ proposedStart へ動かす。
+// 15分スナップ、最短15分、表示範囲の上端までに収める
+export function clampResizeTop(
+  proposedStart: number,
+  base: { startMin: number; durationMin: number },
+  range: Range,
+): { startMin: number; durationMin: number } {
+  const end = base.startMin + base.durationMin
+  const startMin = clamp(snap(proposedStart), range.startMin, Math.max(range.startMin, end - MIN_BLOCK_DURATION_MIN))
+  return { startMin, durationMin: end - startMin }
+}
+
 // 開始時刻でソート → 重なるものをクラスタ化 → 空いている最初の列に割り当て → 列数nで幅を1/nにする
 export function layoutBlocks(blocks: Placed[]): BlockLayout[] {
   const sorted = [...blocks].sort(
