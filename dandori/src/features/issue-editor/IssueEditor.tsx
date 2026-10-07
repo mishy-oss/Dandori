@@ -1,6 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { ISSUE_TYPES, PRIORITIES, type Issue, type IssueType, type Priority } from '../../db/types'
 import { selectCurrentProject, useDataStore } from '../../store/data'
+import { formatMin, parseTime } from '../timeline/timelineLogic'
 
 const FIELD =
   'min-h-11 w-full rounded-lg border border-border bg-surface-2 px-3 text-base'
@@ -9,16 +10,19 @@ export function IssueEditor({
   issue,
   defaultStatusId,
   defaultSprintId = null,
+  initialSchedule,
   onClose,
 }: {
   issue: Issue | null
   defaultStatusId?: string
   defaultSprintId?: string | null
+  initialSchedule?: { date: string | null; startMin: number | null }
   onClose: () => void
 }) {
   const project = useDataStore(selectCurrentProject)
   const workflow = useDataStore((s) => (project ? s.workflows[project.workflowId] : undefined))
   const sprints = useDataStore((s) => s.sprints)
+  const defaultDuration = useDataStore((s) => s.settings.defaultDuration)
   const createIssue = useDataStore((s) => s.createIssue)
   const updateIssue = useDataStore((s) => s.updateIssue)
   const deleteIssue = useDataStore((s) => s.deleteIssue)
@@ -45,6 +49,10 @@ export function IssueEditor({
   )
   const [sprintId, setSprintId] = useState<string | null>(issue ? issue.sprintId : defaultSprintId)
   const [dueDate, setDueDate] = useState(issue?.dueDate ?? '')
+  const [date, setDate] = useState(issue?.date ?? initialSchedule?.date ?? '')
+  const startInit = issue ? issue.startMin : (initialSchedule?.startMin ?? null)
+  const [startTime, setStartTime] = useState(startInit === null ? '' : formatMin(startInit))
+  const [duration, setDuration] = useState(String(issue?.durationMin ?? defaultDuration))
   const [error, setError] = useState<string | null>(null)
 
   async function reorder(delta: -1 | 1) {
@@ -67,6 +75,11 @@ export function IssueEditor({
 
   function onSubmit(e: FormEvent) {
     e.preventDefault()
+    const startMin = startTime ? parseTime(startTime) : null
+    if (startTime && startMin === null) {
+      setError('開始時刻が正しくありません')
+      return
+    }
     const common = {
       title,
       description: description || undefined,
@@ -74,6 +87,9 @@ export function IssueEditor({
       priority,
       statusId,
       dueDate: dueDate || null,
+      date: date || null,
+      startMin,
+      durationMin: Number(duration),
     }
     void run(async () => {
       if (!issue) {
@@ -175,6 +191,46 @@ export function IssueEditor({
             />
           </label>
         </div>
+
+        <fieldset className="flex flex-col gap-2 rounded-lg border border-border p-3">
+          <legend className="px-1 text-sm font-semibold text-muted">スケジュール(タイムライン)</legend>
+          <div className="grid grid-cols-3 gap-2">
+            <label className="col-span-3 flex flex-col gap-1 text-sm text-muted sm:col-span-1">
+              日付
+              <input type="date" className={FIELD} value={date} onChange={(e) => setDate(e.target.value)} />
+            </label>
+            <label className="flex flex-col gap-1 text-sm text-muted">
+              開始時刻
+              <input
+                type="time"
+                step={300}
+                className={FIELD}
+                value={startTime}
+                onChange={(e) => setStartTime(e.target.value)}
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm text-muted">
+              所要(分)
+              <input
+                type="number"
+                inputMode="numeric"
+                min={5}
+                step={5}
+                className={FIELD}
+                value={duration}
+                onChange={(e) => setDuration(e.target.value)}
+              />
+            </label>
+          </div>
+          <button
+            type="button"
+            disabled={!startTime}
+            onClick={() => setStartTime('')}
+            className="min-h-11 rounded-lg border border-border text-sm disabled:opacity-40"
+          >
+            未配置に戻す(時刻をクリア)
+          </button>
+        </fieldset>
 
         {issue && column.length > 1 && (
           <div className="flex items-center gap-2">

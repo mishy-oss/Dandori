@@ -1,11 +1,12 @@
 import Dexie, { type EntityTable } from 'dexie'
-import type { Issue, Project, Sprint, Workflow } from './types'
+import type { Issue, Project, Settings, Sprint, Workflow } from './types'
 
 export class DandoriDB extends Dexie {
   projects!: EntityTable<Project, 'id'>
   workflows!: EntityTable<Workflow, 'id'>
   issues!: EntityTable<Issue, 'id'>
   sprints!: EntityTable<Sprint, 'id'>
+  settings!: EntityTable<Settings, 'id'>
 
   constructor(name = 'dandori') {
     super(name)
@@ -17,6 +18,9 @@ export class DandoriDB extends Dexie {
     })
     this.version(2).stores({
       sprints: 'id, projectId, state, updatedAt, deletedAt',
+    })
+    this.version(3).stores({
+      settings: 'id',
     })
   }
 }
