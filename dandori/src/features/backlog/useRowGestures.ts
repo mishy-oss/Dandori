@@ -23,6 +23,7 @@ export function useRowGestures(onTrigger: () => void) {
   const onPointerDown = useCallback((e: ReactPointerEvent) => {
     if (teardown.current) return
     if (e.pointerType === 'mouse' && e.button !== 0) return
+    if ((e.target as HTMLElement).closest('[data-no-drag]')) return
     gestured.current = false
 
     const { pointerId, clientX: startX, clientY: startY } = e

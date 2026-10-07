@@ -22,6 +22,7 @@ export function BacklogScreen() {
   const ready = useDataStore((s) => s.ready)
   const startSprint = useDataStore((s) => s.startSprint)
   const deleteSprint = useDataStore((s) => s.deleteSprint)
+  const toggleIssueDone = useDataStore((s) => s.toggleIssueDone)
 
   const [filter, setFilter] = useState<IssueFilter>(EMPTY_FILTER)
   const [showClosed, setShowClosed] = useState(false)
@@ -136,9 +137,11 @@ export function BacklogScreen() {
             doneCount={inSprint.filter((i) => doneIds.has(i.statusId)).length}
             estimateMin={inSprint.reduce((sum, i) => sum + (i.estimateMin ?? 0), 0)}
             filtered={filtered}
+            doneIds={doneIds}
             statusName={statusName}
             onOpen={setEditing}
             onMove={setMoving}
+            onToggleDone={(i) => void run(() => toggleIssueDone(i.id))}
             onStart={() => void run(() => startSprint(s.id))}
             onComplete={() => setCompleting(s)}
             onEdit={() => setSprintForm(s)}
@@ -167,9 +170,11 @@ export function BacklogScreen() {
               <li key={i.id}>
                 <BacklogRow
                   issue={i}
+                  done={doneIds.has(i.statusId)}
                   statusName={statusName(i.statusId)}
                   onOpen={() => setEditing(i)}
                   onMove={() => setMoving(i)}
+                  onToggleDone={() => void run(() => toggleIssueDone(i.id))}
                 />
               </li>
             ))}

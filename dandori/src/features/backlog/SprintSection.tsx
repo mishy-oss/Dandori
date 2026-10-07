@@ -10,9 +10,11 @@ export function SprintSection({
   doneCount,
   estimateMin,
   filtered,
+  doneIds,
   statusName,
   onOpen,
   onMove,
+  onToggleDone,
   onStart,
   onComplete,
   onEdit,
@@ -24,9 +26,11 @@ export function SprintSection({
   doneCount: number
   estimateMin: number
   filtered: boolean
+  doneIds: Set<string>
   statusName: (id: string) => string
   onOpen: (issue: Issue) => void
   onMove: (issue: Issue) => void
+  onToggleDone: (issue: Issue) => void
   onStart: () => void
   onComplete: () => void
   onEdit: () => void
@@ -98,9 +102,11 @@ export function SprintSection({
             <li key={i.id}>
               <BacklogRow
                 issue={i}
+                done={doneIds.has(i.statusId)}
                 statusName={statusName(i.statusId)}
                 onOpen={() => onOpen(i)}
                 onMove={() => onMove(i)}
+                onToggleDone={() => onToggleDone(i)}
               />
             </li>
           ))}
