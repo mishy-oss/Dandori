@@ -1,11 +1,13 @@
 import { useMemo, useState, type FormEvent } from 'react'
-import { ISSUE_TYPES, PRIORITIES, type Issue, type IssueType, type Priority } from '../../db/types'
+import { ISSUE_TYPES, PRIORITIES, type Issue, type IssueType, type Priority, type RecurrenceFrequency } from '../../db/types'
 import { formatIssueNumber } from '../../lib/issueNumber'
+import { todayStr } from '../../lib/date'
 import { selectCurrentProject, useDataStore } from '../../store/data'
 import { formatMin, parseTime } from '../timeline/timelineLogic'
 
 const FIELD =
   'min-h-11 w-full rounded-lg border border-border bg-surface-2 px-3 text-base'
+const WEEKDAY_LABELS = ['日', '月', '火', '水', '木', '金', '土']
 
 export function IssueEditor({
   issue,
@@ -29,6 +31,8 @@ export function IssueEditor({
   const deleteIssue = useDataStore((s) => s.deleteIssue)
   const moveIssue = useDataStore((s) => s.moveIssue)
   const assignIssueToSprint = useDataStore((s) => s.assignIssueToSprint)
+  const stopRecurrence = useDataStore((s) => s.stopRecurrence)
+  const recurrenceRule = useDataStore((s) => s.recurrenceRules.find((rule) => rule.id === issue?.recurrenceId))
   const issues = useDataStore((s) => s.issues)
   // 並び順は「同じステータス・同じスプリント(またはバックログ)」の中で扱う
   const column = useMemo(
@@ -55,6 +59,12 @@ export function IssueEditor({
   const startInit = issue ? issue.startMin : (initialSchedule?.startMin ?? null)
   const [startTime, setStartTime] = useState(startInit === null ? '' : formatMin(startInit))
   const [duration, setDuration] = useState(String(issue?.durationMin ?? defaultDuration))
+  const [recurrence, setRecurrence] = useState<RecurrenceFrequency | ''>(recurrenceRule?.frequency ?? '')
+  const [recurrenceInterval, setRecurrenceInterval] = useState(String(recurrenceRule?.interval ?? 1))
+  const [recurrenceWeekdays, setRecurrenceWeekdays] = useState<number[]>(() =>
+    recurrenceRule?.weekdays ?? [new Date(`${date || todayStr()}T00:00:00`).getDay()],
+  )
+  const [recurrenceEndDate, setRecurrenceEndDate] = useState(recurrenceRule?.endDate ?? '')
   const [error, setError] = useState<string | null>(null)
   const [childTitle, setChildTitle] = useState('')
   const [addingChild, setAddingChild] = useState(false)
@@ -116,6 +126,10 @@ export function IssueEditor({
       setError('開始時刻が正しくありません')
       return
     }
+    if (recurrence === 'weekly' && recurrenceWeekdays.length === 0) {
+      setError('繰り返す曜日を1つ以上選択してください')
+      return
+    }
     const common = {
       title,
       description: description || undefined,
@@ -130,11 +144,32 @@ export function IssueEditor({
     }
     void run(async () => {
       if (!issue) {
-        await createIssue({ ...common, sprintId })
+        await createIssue({
+          ...common,
+          sprintId,
+          ...(recurrence && {
+            recurrence: {
+              frequency: recurrence,
+              interval: Number(recurrenceInterval),
+              ...(recurrence === 'weekly' && { weekdays: recurrenceWeekdays }),
+              endDate: recurrenceEndDate || null,
+            },
+          }),
+        })
         return
       }
       if (sprintId !== issue.sprintId) await assignIssueToSprint(issue.id, sprintId)
-      await updateIssue(issue.id, common)
+      await updateIssue(issue.id, {
+        ...common,
+        recurrence: recurrence
+          ? {
+              frequency: recurrence,
+              interval: Number(recurrenceInterval),
+              ...(recurrence === 'weekly' && { weekdays: recurrenceWeekdays }),
+              endDate: recurrenceEndDate || null,
+            }
+          : null,
+      })
     })
   }
 
@@ -162,6 +197,92 @@ export function IssueEditor({
             autoFocus={!issue}
           />
         </label>
+
+        <fieldset className="flex flex-col gap-2 rounded-lg border border-border p-3">
+            <legend className="px-1 text-sm font-semibold text-muted">繰り返し</legend>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="flex flex-col gap-1 text-sm text-muted">
+                頻度
+                <select
+                  className={FIELD}
+                  value={recurrence}
+                  onChange={(e) => setRecurrence(e.target.value as RecurrenceFrequency | '')}
+                >
+                  <option value="">繰り返さない</option>
+                  <option value="daily">毎日</option>
+                  <option value="weekly">毎週</option>
+                </select>
+              </label>
+              {recurrence && (
+                <label className="flex flex-col gap-1 text-sm text-muted">
+                  間隔
+                  <span className="flex min-h-11 items-center gap-2">
+                    <span>毎</span>
+                    <input
+                      type="number"
+                      className={`${FIELD} w-20`}
+                      min={1}
+                      max={365}
+                      value={recurrenceInterval}
+                      onChange={(e) => setRecurrenceInterval(e.target.value)}
+                    />
+                    <span>{recurrence === 'daily' ? '日' : '週'}</span>
+                  </span>
+                </label>
+              )}
+              {recurrence === 'weekly' && (
+                <div className="col-span-2 flex flex-col gap-1 text-sm text-muted">
+                  <span>曜日（複数選択可）</span>
+                  <div className="grid grid-cols-7 gap-1" role="group" aria-label="繰り返す曜日">
+                    {WEEKDAY_LABELS.map((label, weekday) => {
+                      const selected = recurrenceWeekdays.includes(weekday)
+                      return (
+                        <button
+                          key={weekday}
+                          type="button"
+                          aria-pressed={selected}
+                          onClick={() =>
+                            setRecurrenceWeekdays((current) =>
+                              selected
+                                ? current.filter((day) => day !== weekday)
+                                : [...current, weekday].sort((a, b) => a - b),
+                            )
+                          }
+                          className={`min-h-11 rounded-lg border text-sm ${selected ? 'border-accent bg-accent text-accent-text' : 'border-border bg-surface-2'}`}
+                        >
+                          {label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+              {recurrence && (
+                <label className="col-span-2 flex flex-col gap-1 text-sm text-muted">
+                  繰り返し終了日（任意）
+                  <input
+                    type="date"
+                    className={FIELD}
+                    min={date || undefined}
+                    value={recurrenceEndDate}
+                    onChange={(e) => setRecurrenceEndDate(e.target.value)}
+                  />
+                </label>
+              )}
+            </div>
+            {recurrence && (
+              <p className="text-xs text-muted">このタスクを完了すると、次回分をバックログに作成します。</p>
+            )}
+            {issue && recurrenceRule?.active && (
+              <button
+                type="button"
+                className="min-h-11 rounded-lg border border-border px-3 text-sm"
+                onClick={() => void run(() => stopRecurrence(recurrenceRule.id))}
+              >
+                この繰り返しを停止
+              </button>
+            )}
+          </fieldset>
 
         <label className="flex flex-col gap-1 text-sm text-muted">
           説明

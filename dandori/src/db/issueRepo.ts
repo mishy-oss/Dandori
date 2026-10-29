@@ -2,9 +2,18 @@ import { db } from './db'
 import { newId, now } from '../lib/id'
 import { compareRank, rankAfter, rankBetween, ranksForCount } from '../lib/rank'
 import { validateSchedule } from '../lib/schedule'
+import { isValidDateStr, nextRecurrenceDate, nextWeeklyRecurrenceDate, todayStr } from '../lib/date'
 import { getProject, getWorkflow } from './projectRepo'
 import { getSprint } from './sprintRepo'
-import type { Issue, IssueType, Priority } from './types'
+import { expandRecurrenceInSprint } from './recurrenceRepo'
+import type { Issue, IssueType, Priority, RecurrenceFrequency, RecurrenceRule } from './types'
+
+export interface RecurrenceInput {
+  frequency: RecurrenceFrequency
+  interval: number
+  weekdays?: number[]
+  endDate?: string | null
+}
 
 export interface CreateIssueInput {
   projectId: string
@@ -21,16 +30,51 @@ export interface CreateIssueInput {
   date?: string | null
   startMin?: number | null
   durationMin?: number
+  recurrence?: RecurrenceInput
 }
 
 export type IssuePatch = Partial<
-  Omit<Issue, 'id' | 'projectId' | 'number' | 'rank' | 'createdAt' | 'updatedAt' | 'deletedAt'>
->
+  Omit<Issue, 'id' | 'projectId' | 'number' | 'rank' | 'createdAt' | 'updatedAt' | 'deletedAt' | 'recurrenceId'>
+> & { recurrence?: RecurrenceInput | null }
 
 const DEFAULT_DURATION_MIN = 30
 
 function activeInStatus(issues: Issue[], statusId: string): Issue[] {
   return issues.filter((i) => i.deletedAt === null && i.statusId === statusId)
+}
+
+function normalizeRecurrence(input: RecurrenceInput, startDate: string): Omit<RecurrenceRule, 'id' | 'projectId' | 'createdAt' | 'updatedAt'> {
+  if (!Number.isInteger(input.interval) || input.interval < 1 || input.interval > 365) {
+    throw new Error('繰り返し間隔は1〜365で指定してください')
+  }
+  if (input.endDate && !isValidDateStr(input.endDate)) {
+    throw new Error('繰り返し終了日が正しくありません')
+  }
+  if (input.endDate && input.endDate < startDate) {
+    throw new Error('繰り返し終了日は開始日以降にしてください')
+  }
+
+  let weekdays: number[] | undefined
+  if (input.frequency === 'weekly') {
+    weekdays = input.weekdays ?? [new Date(`${startDate}T00:00:00`).getDay()]
+    if (
+      weekdays.length === 0 ||
+      weekdays.some((weekday) => !Number.isInteger(weekday) || weekday < 0 || weekday > 6) ||
+      new Set(weekdays).size !== weekdays.length
+    ) {
+      throw new Error('繰り返す曜日を1つ以上選択してください')
+    }
+    weekdays = [...weekdays].sort((a, b) => a - b)
+  }
+
+  return {
+    frequency: input.frequency,
+    interval: input.interval,
+    ...(weekdays && { weekdays }),
+    startDate,
+    endDate: input.endDate || null,
+    active: true,
+  }
 }
 
 async function nextRankInStatus(
@@ -60,11 +104,17 @@ export async function getIssue(id: string): Promise<Issue | undefined> {
   return i && i.deletedAt === null ? i : undefined
 }
 
+export async function listRecurrenceRules(projectId: string): Promise<RecurrenceRule[]> {
+  return db.recurrenceRules.where('projectId').equals(projectId).toArray()
+}
+
 export async function createIssue(input: CreateIssueInput): Promise<Issue> {
   const title = input.title.trim()
   if (!title) throw new Error('タイトルを入力してください')
 
-  return db.transaction('rw', db.projects, db.workflows, db.issues, db.sprints, async () => {
+  return db.transaction(
+    'rw', db.projects, db.workflows, db.issues, db.sprints, db.recurrenceRules,
+    async () => {
     const project = await getProject(input.projectId)
     if (!project) throw new Error('プロジェクトが見つかりません')
     const workflow = await getWorkflow(project.workflowId)
@@ -84,9 +134,23 @@ export async function createIssue(input: CreateIssueInput): Promise<Issue> {
 
     if (input.parentId) await validateParent(project.id, input.parentId)
 
+    const recurrenceStartDate = input.date ?? todayStr()
+    const recurrenceValues = input.recurrence
+      ? normalizeRecurrence(input.recurrence, recurrenceStartDate)
+      : null
+
     validateSchedule(input.date ?? null, input.startMin ?? null, input.durationMin ?? DEFAULT_DURATION_MIN)
 
     const t = now()
+    const recurrenceRule: RecurrenceRule | null = recurrenceValues
+      ? {
+          id: newId(),
+          projectId: project.id,
+          ...recurrenceValues,
+          createdAt: t,
+          updatedAt: t,
+        }
+      : null
     const issue: Issue = {
       id: newId(),
       projectId: project.id,
@@ -102,64 +166,159 @@ export async function createIssue(input: CreateIssueInput): Promise<Issue> {
       estimateMin: input.estimateMin ?? null,
       sprintId: input.sprintId ?? null,
       rank: await nextRankInStatus(project.id, statusId),
-      date: input.date ?? null,
+      date: input.date ?? (recurrenceRule ? recurrenceStartDate : null),
       startMin: input.startMin ?? null,
       durationMin: input.durationMin ?? DEFAULT_DURATION_MIN,
       icon: '',
       color: project.color,
       reminderOffsetMin: null,
-      recurrenceId: null,
+      recurrenceId: recurrenceRule?.id ?? null,
       assigneeId: null,
       completedAt: status.category === 'done' ? t : null,
       createdAt: t,
       updatedAt: t,
       deletedAt: null,
     }
+    if (recurrenceRule) await db.recurrenceRules.add(recurrenceRule)
     await db.issues.add(issue)
     await db.projects.update(project.id, {
       nextNumber: project.nextNumber + 1,
       updatedAt: t,
     })
+    if (recurrenceRule && issue.sprintId) {
+      const sprint = await getSprint(issue.sprintId)
+      if (sprint) await expandRecurrenceInSprint(issue, sprint, t)
+    }
     return issue
-  })
+    },
+  )
 }
 
 export async function updateIssue(
   id: string,
   patch: IssuePatch,
 ): Promise<Issue> {
-  const title = patch.title?.trim()
-  if (patch.title !== undefined && !title) {
+  const { recurrence: recurrencePatch, ...issuePatch } = patch
+  const title = issuePatch.title?.trim()
+  if (issuePatch.title !== undefined && !title) {
     throw new Error('タイトルを入力してください')
   }
 
-  return db.transaction('rw', db.projects, db.workflows, db.issues, async () => {
+  return db.transaction('rw', db.projects, db.workflows, db.issues, db.sprints, db.recurrenceRules, async () => {
     const current = await getIssue(id)
     if (!current) throw new Error('Issueが見つかりません')
-    if (patch.parentId) await validateParent(current.projectId, patch.parentId, id)
+    if (issuePatch.parentId) await validateParent(current.projectId, issuePatch.parentId, id)
 
     const t = now()
     const next: Issue = {
       ...current,
-      ...patch,
+      ...issuePatch,
       ...(title !== undefined && { title }),
       updatedAt: t,
     }
     validateSchedule(next.date, next.startMin, next.durationMin)
 
+    if (recurrencePatch !== undefined) {
+      const existingRule = current.recurrenceId
+        ? await db.recurrenceRules.get(current.recurrenceId)
+        : undefined
+      if (recurrencePatch === null) {
+        if (existingRule) {
+          await db.recurrenceRules.update(existingRule.id, { active: false, updatedAt: t })
+          await db.issues.where('recurrenceId').equals(existingRule.id).modify({ recurrenceId: null, updatedAt: t })
+        }
+        next.recurrenceId = null
+      } else {
+        const recurrenceStartDate = next.date ?? existingRule?.startDate ?? todayStr()
+        const recurrenceValues = normalizeRecurrence(recurrencePatch, recurrenceStartDate)
+        if (existingRule) {
+          await db.recurrenceRules.put({ ...existingRule, ...recurrenceValues, updatedAt: t })
+          next.recurrenceId = existingRule.id
+        } else {
+          const newRule: RecurrenceRule = {
+            id: newId(),
+            projectId: current.projectId,
+            ...recurrenceValues,
+            createdAt: t,
+            updatedAt: t,
+          }
+          await db.recurrenceRules.add(newRule)
+          next.recurrenceId = newRule.id
+        }
+      }
+    }
+
     // ステータスとスケジュールは独立。ステータス変更時は完了日時と列内の並びだけ更新する
-    if (patch.statusId !== undefined && patch.statusId !== current.statusId) {
+    let transitionedToDone = false
+    if (issuePatch.statusId !== undefined && issuePatch.statusId !== current.statusId) {
       const project = await getProject(current.projectId)
       const workflow = project && (await getWorkflow(project.workflowId))
-      const status = workflow?.statuses.find((s) => s.id === patch.statusId)
+      const status = workflow?.statuses.find((s) => s.id === issuePatch.statusId)
       if (!status) throw new Error('ステータスが見つかりません')
+      const previousStatus = workflow?.statuses.find((s) => s.id === current.statusId)
+      transitionedToDone = status.category === 'done' && previousStatus?.category !== 'done'
       next.completedAt = status.category === 'done' ? t : null
       next.rank = await nextRankInStatus(current.projectId, status.id)
     }
 
     await db.issues.put(next)
+    if (recurrencePatch !== undefined && next.sprintId && next.recurrenceId) {
+      const sprint = await getSprint(next.sprintId)
+      if (sprint) await expandRecurrenceInSprint(next, sprint, t)
+    }
+    if (transitionedToDone) await createNextOccurrence(next, t)
     return next
   })
+}
+
+async function createNextOccurrence(completed: Issue, timestamp: number): Promise<void> {
+  if (!completed.recurrenceId) return
+  const rule = await db.recurrenceRules.get(completed.recurrenceId)
+  if (!rule?.active) return
+  if (completed.sprintId) {
+    const sprint = await getSprint(completed.sprintId)
+    if (sprint) await expandRecurrenceInSprint(completed, sprint, timestamp)
+  }
+  const refreshed = completed.sprintId ? await db.issues.get(completed.id) : undefined
+  const currentDate = refreshed?.date ?? completed.date ?? rule.startDate
+  const nextDate =
+    rule.frequency === 'weekly' && rule.weekdays?.length
+      ? nextWeeklyRecurrenceDate(currentDate, rule.weekdays, rule.interval, rule.startDate)
+      : nextRecurrenceDate(currentDate, rule.frequency, rule.interval)
+  if (rule.endDate && nextDate > rule.endDate) return
+
+  const alreadyExists = await db.issues
+    .where('recurrenceId')
+    .equals(rule.id)
+    .filter((issue) => issue.deletedAt === null && issue.date === nextDate)
+    .first()
+  if (alreadyExists) return
+
+  const project = await getProject(completed.projectId)
+  const workflow = project && await getWorkflow(project.workflowId)
+  const todoStatus = workflow?.statuses.find((status) => status.category === 'todo')
+  if (!project || !todoStatus) return
+
+  const nextIssue: Issue = {
+    ...completed,
+    id: newId(),
+    number: project.nextNumber,
+    statusId: todoStatus.id,
+    sprintId: null,
+    rank: await nextRankInStatus(project.id, todoStatus.id),
+    date: nextDate,
+    dueDate: completed.dueDate === currentDate ? nextDate : completed.dueDate,
+    completedAt: null,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    deletedAt: null,
+  }
+  await db.issues.add(nextIssue)
+  await db.projects.update(project.id, { nextNumber: project.nextNumber + 1, updatedAt: timestamp })
+}
+
+export async function stopRecurrence(id: string): Promise<void> {
+  await db.recurrenceRules.update(id, { active: false, updatedAt: now() })
 }
 
 async function validateParent(projectId: string, parentId: string, issueId?: string): Promise<void> {
@@ -183,13 +342,14 @@ export async function moveIssue(
   index: number,
   scopeSprintId?: string | null,
 ): Promise<Issue> {
-  return db.transaction('rw', db.projects, db.workflows, db.issues, async () => {
+  return db.transaction('rw', db.projects, db.workflows, db.issues, db.sprints, db.recurrenceRules, async () => {
     const current = await getIssue(id)
     if (!current) throw new Error('Issueが見つかりません')
     const project = await getProject(current.projectId)
     const workflow = project && (await getWorkflow(project.workflowId))
     const status = workflow?.statuses.find((s) => s.id === statusId)
     if (!status) throw new Error('ステータスが見つかりません')
+    const previousStatus = workflow?.statuses.find((s) => s.id === current.statusId)
 
     const t = now()
     const others = activeInStatus(
@@ -221,13 +381,16 @@ export async function moveIssue(
       updatedAt: t,
     }
     await db.issues.put(moved)
+    if (status.category === 'done' && previousStatus?.category !== 'done') await createNextOccurrence(moved, t)
     return moved
   })
 }
 
 export async function deleteIssue(id: string): Promise<void> {
-  await db.transaction('rw', db.issues, async () => {
+  await db.transaction('rw', db.projects, db.workflows, db.issues, db.sprints, db.recurrenceRules, async () => {
     const t = now()
+    const current = await getIssue(id)
+    if (current) await createNextOccurrence(current, t)
     const toDelete = new Set<string>([id])
     // サブタスク/Epic配下を再帰的に論理削除する
     let frontier = [id]

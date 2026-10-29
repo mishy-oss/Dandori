@@ -1,10 +1,11 @@
 import Dexie, { type EntityTable } from 'dexie'
-import type { Issue, Project, Settings, Sprint, Workflow } from './types'
+import type { Issue, Project, RecurrenceRule, Settings, Sprint, Workflow } from './types'
 
 export class DandoriDB extends Dexie {
   projects!: EntityTable<Project, 'id'>
   workflows!: EntityTable<Workflow, 'id'>
   issues!: EntityTable<Issue, 'id'>
+  recurrenceRules!: EntityTable<RecurrenceRule, 'id'>
   sprints!: EntityTable<Sprint, 'id'>
   settings!: EntityTable<Settings, 'id'>
 
@@ -21,6 +22,13 @@ export class DandoriDB extends Dexie {
     })
     this.version(3).stores({
       settings: 'id',
+    })
+    this.version(4).stores({
+      recurrenceRules: 'id, projectId, active, startDate',
+    })
+    this.version(5).stores({
+      issues:
+        'id, projectId, statusId, sprintId, parentId, date, rank, updatedAt, deletedAt, recurrenceId, [projectId+number]',
     })
   }
 }

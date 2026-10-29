@@ -68,6 +68,7 @@ export function BacklogRow({
         <div className="flex min-w-0 flex-1 flex-col items-start gap-1">
           <span className="text-xs text-muted">
             {formatIssueNumber(issue.number)} · {issue.type} · {issue.priority}
+            {issue.recurrenceId ? ' · ↻ 繰り返し' : ''}
             {issue.estimateMin ? ` · ${issue.estimateMin}分` : ''}
           </span>
           <span className={done ? 'line-through opacity-60' : ''}>{issue.title}</span>
