@@ -62,6 +62,7 @@ export function BoardCard({
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="text-xs text-muted">
           {formatIssueNumber(issue.number)} · {issue.type}
+          {issue.recurrenceId ? ' · ↻' : ''}
           {issue.dueDate ? ` · 期限 ${issue.dueDate}` : ''}
         </span>
         <span className={done ? 'line-through opacity-60' : ''}>{issue.title}</span>

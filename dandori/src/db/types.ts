@@ -64,6 +64,22 @@ export interface Issue {
   deletedAt: number | null
 }
 
+export type RecurrenceFrequency = 'daily' | 'weekly'
+
+export interface RecurrenceRule {
+  id: ID
+  projectId: ID
+  frequency: RecurrenceFrequency
+  interval: number
+  /** JavaScript weekday numbers: Sunday = 0 through Saturday = 6. */
+  weekdays?: number[]
+  startDate: string
+  endDate: string | null
+  active: boolean
+  createdAt: number
+  updatedAt: number
+}
+
 export const ISSUE_TYPES: IssueType[] = ['task', 'bug', 'story', 'epic']
 export const PRIORITIES: Priority[] = ['low', 'medium', 'high', 'urgent']
 
