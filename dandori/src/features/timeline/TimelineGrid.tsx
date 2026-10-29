@@ -148,7 +148,9 @@ export function TimelineGrid({
                   {done ? '✓' : ''}
                 </button>
                 <div className="min-w-0 flex-1 leading-tight">
-                  <p className={`truncate text-xs font-medium ${done ? 'line-through' : ''}`}>{issue.title}</p>
+                  <p className={`truncate text-xs font-medium ${done ? 'line-through' : ''}`}>
+                    {issue.recurrenceId ? '↻ ' : ''}{issue.title}
+                  </p>
                   {durationMin >= 45 && (
                     <p className="truncate text-[10px] text-muted">
                       {formatMin(startMin)}–{formatMin(startMin + durationMin)}

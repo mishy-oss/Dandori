@@ -3,6 +3,7 @@ import { db } from './db'
 import { addDaysStr, isValidDateStr, todayStr } from '../lib/date'
 import { newId, now } from '../lib/id'
 import { getProject, getWorkflow } from './projectRepo'
+import { expandRecurrenceInSprint } from './recurrenceRepo'
 import type { Issue, Sprint, SprintSnapshot } from './types'
 
 export const DEFAULT_SPRINT_DAYS = 14
@@ -242,7 +243,7 @@ export async function completeSprint(
 
 // 完了済みスプリントへは移せない。null でバックログへ戻す
 export async function assignIssueToSprint(issueId: string, sprintId: string | null): Promise<Issue> {
-  return db.transaction('rw', db.sprints, db.issues, async () => {
+  return db.transaction('rw', db.projects, db.workflows, db.sprints, db.issues, db.recurrenceRules, async () => {
     const issue = await db.issues.get(issueId)
     if (!issue || issue.deletedAt !== null) throw new Error('Issueが見つかりません')
     if (sprintId !== null) {
@@ -252,6 +253,10 @@ export async function assignIssueToSprint(issueId: string, sprintId: string | nu
     }
     const next: Issue = { ...issue, sprintId, updatedAt: now() }
     await db.issues.put(next)
+    if (sprintId && next.recurrenceId) {
+      const sprint = await getSprint(sprintId)
+      if (sprint) await expandRecurrenceInSprint(next, sprint, next.updatedAt)
+    }
     return next
   })
 }

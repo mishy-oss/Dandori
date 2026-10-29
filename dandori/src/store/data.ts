@@ -3,7 +3,7 @@ import * as issueRepo from '../db/issueRepo'
 import * as projectRepo from '../db/projectRepo'
 import * as settingsRepo from '../db/settingsRepo'
 import * as sprintRepo from '../db/sprintRepo'
-import { DEFAULT_SETTINGS, type Issue, type Project, type Settings, type Sprint, type Workflow } from '../db/types'
+import { DEFAULT_SETTINGS, type Issue, type Project, type RecurrenceRule, type Settings, type Sprint, type Workflow } from '../db/types'
 import { applyMove } from '../lib/issueOrder'
 
 export interface ScheduleChange {
@@ -19,6 +19,7 @@ interface DataState {
   workflows: Record<string, Workflow>
   currentProjectId: string | null
   issues: Issue[]
+  recurrenceRules: RecurrenceRule[]
   sprints: Sprint[]
 
   init: () => Promise<void>
@@ -34,6 +35,7 @@ interface DataState {
     scopeSprintId?: string | null,
   ) => Promise<void>
   deleteIssue: (id: string) => Promise<void>
+  stopRecurrence: (id: string) => Promise<void>
   createSprint: (input?: sprintRepo.SprintInput) => Promise<Sprint>
   updateSprint: (id: string, patch: Parameters<typeof sprintRepo.updateSprint>[1]) => Promise<void>
   deleteSprint: (id: string) => Promise<void>
@@ -56,6 +58,7 @@ export const useDataStore = create<DataState>((set, get) => {
       if (w) workflows[w.id] = w
     }
     const issues = current ? await issueRepo.listIssues(current.id) : []
+    const recurrenceRules = current ? await issueRepo.listRecurrenceRules(current.id) : []
     let sprints = current ? await sprintRepo.listSprints(current.id) : []
     const activeSprint = sprints.find((s) => s.state === 'active')
     if (activeSprint) {
@@ -70,6 +73,7 @@ export const useDataStore = create<DataState>((set, get) => {
       workflows,
       currentProjectId: current?.id ?? null,
       issues,
+      recurrenceRules,
       sprints,
     })
   }
@@ -87,6 +91,7 @@ export const useDataStore = create<DataState>((set, get) => {
     workflows: {},
     currentProjectId: null,
     issues: [],
+    recurrenceRules: [],
     sprints: [],
 
     init: async () => {
@@ -157,6 +162,10 @@ export const useDataStore = create<DataState>((set, get) => {
     },
     deleteIssue: async (id) => {
       await issueRepo.deleteIssue(id)
+      await reload()
+    },
+    stopRecurrence: async (id) => {
+      await issueRepo.stopRecurrence(id)
       await reload()
     },
     createSprint: async (input) => {
