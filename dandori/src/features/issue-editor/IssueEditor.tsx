@@ -59,6 +59,7 @@ export function IssueEditor({
   const startInit = issue ? issue.startMin : (initialSchedule?.startMin ?? null)
   const [startTime, setStartTime] = useState(startInit === null ? '' : formatMin(startInit))
   const [duration, setDuration] = useState(String(issue?.durationMin ?? defaultDuration))
+  const [reminderOffsetMin, setReminderOffsetMin] = useState<number | null>(issue ? issue.reminderOffsetMin : 0)
   const [recurrence, setRecurrence] = useState<RecurrenceFrequency | ''>(recurrenceRule?.frequency ?? '')
   const [recurrenceInterval, setRecurrenceInterval] = useState(String(recurrenceRule?.interval ?? 1))
   const [recurrenceWeekdays, setRecurrenceWeekdays] = useState<number[]>(() =>
@@ -141,6 +142,7 @@ export function IssueEditor({
       date: date || null,
       startMin,
       durationMin: Number(duration),
+      reminderOffsetMin,
     }
     void run(async () => {
       if (!issue) {
@@ -349,6 +351,22 @@ export function IssueEditor({
                 </option>
               ))}
             </select>
+          </label>
+          <label className="col-span-2 flex flex-col gap-1 text-sm text-muted">
+            通知
+            <select
+              className={FIELD}
+              value={reminderOffsetMin === null ? 'none' : String(reminderOffsetMin)}
+              onChange={(e) => setReminderOffsetMin(e.target.value === 'none' ? null : Number(e.target.value))}
+            >
+              <option value="none">通知しない</option>
+              <option value="0">予定時刻</option>
+              <option value="5">5分前</option>
+              <option value="15">15分前</option>
+              <option value="30">30分前</option>
+              <option value="60">1時間前</option>
+            </select>
+            <span className="text-xs">日付と開始時刻があるIssueに通知します。受信には設定画面でPWA通知を有効にしてください。</span>
           </label>
           <label className="flex flex-col gap-1 text-sm text-muted">
             期限
