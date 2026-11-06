@@ -1,9 +1,18 @@
-{
+﻿{
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "dandori",
   "compatibility_date": "2026-10-06",
+  "main": "./worker/index.ts",
   "observability": {
     "enabled": true
+  },
+  "durable_objects": {
+    "bindings": [
+      { "name": "PUSH_DEVICES", "class_name": "PushDevice" }
+    ]
+  },
+  "exports": {
+    "PushDevice": { "type": "durable-object", "storage": "sqlite" }
   },
   "assets": {
     "not_found_handling": "single-page-application"

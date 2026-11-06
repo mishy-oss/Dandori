@@ -1,0 +1,10 @@
+{
+  "name": "dandori-workspace",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix dandori run dev --",
+    "build": "npm --prefix dandori run build",
+    "preview": "npm --prefix dandori run preview",
+    "lint": "npm --prefix dandori run lint"
+  }
+}
