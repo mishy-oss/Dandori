@@ -213,10 +213,11 @@ Backlogは行のスワイプでスプリントへ移し、編集シートでは�
 ローカル予約通知(Notification Triggers)は標準化されておらず信頼できない。時刻通りに通知するには、**サーバーからのWeb Pushが事実上必須**。
 
 - **フェーズ6:** アプリ起動中のみのアプリ内通知とバッジ。設定画面に「確実ではない」旨を明記
-- **フェーズ7:** Pushサーバー(Cloudflare Workers + Cron)を追加
+- **フェーズ7:** Pushサーバー(Cloudflare Workers + Durable Objects)を追加
   - 端末のPush購読と、通知予定(時刻と文言)のみを送信
   - **Issue本文・詳細はサーバーに送らない**
-  - タスク変更時は予定を再送して置き換える
+  - タスク変更時は予定を再送して置き換える。通知時刻はDurable Object Alarmで実行する
+  - VAPID秘密鍵はCloudflare Worker Secretで管理し、Issue本文・詳細はサーバーに送らない
 - iOSでは、通知設定の前に「ホーム画面に追加してください」のガイドを出す
 
 ## 10. ディレクトリ構成

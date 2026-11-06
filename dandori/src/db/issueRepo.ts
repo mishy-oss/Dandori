@@ -30,6 +30,7 @@ export interface CreateIssueInput {
   date?: string | null
   startMin?: number | null
   durationMin?: number
+  reminderOffsetMin?: number | null
   recurrence?: RecurrenceInput
 }
 
@@ -171,7 +172,7 @@ export async function createIssue(input: CreateIssueInput): Promise<Issue> {
       durationMin: input.durationMin ?? DEFAULT_DURATION_MIN,
       icon: '',
       color: project.color,
-      reminderOffsetMin: null,
+      reminderOffsetMin: input.reminderOffsetMin ?? null,
       recurrenceId: recurrenceRule?.id ?? null,
       assigneeId: null,
       completedAt: status.category === 'done' ? t : null,
