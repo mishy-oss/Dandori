@@ -45,6 +45,26 @@ GitHub 連携の自動ビルドでは、Cloudflare の Worker → Settings → B
 
 Root directory を変更したら、Cloudflare で失敗したビルドを再実行してください。VAPID キーはビルド変数ではなく、デプロイ先 Worker の Secret に設定します。
 
+### 作業ブランチのプレビュー
+
+Cloudflare の「プレビューのベース」側も Root directory を `dandori`、Build command を `npm run build` に設定し、プレビューのデプロイコマンドには `npx wrangler preview` を使います。本番側のデプロイコマンドは `npx wrangler deploy` です。
+
+`dandori/wrangler.jsonc` の `previews.durable_objects.bindings` に通知用の `PUSH_DEVICES` を定義しています。同じ Worker 内の `PushDevice` クラスを参照し、プレビューごとに専用の保存領域が作られます。本番の通知購読や予定は共有しません。
+
+プレビューで通知も試す場合は、`dandori/` で以下を実行し、入力を求められたときにプレビュー用のVAPIDキーと `mailto:メールアドレス` を入力してください。秘密鍵を設定ファイルへ書かないでください。
+
+```bash
+npx wrangler preview base-config secret put VAPID_PUBLIC_KEY
+npx wrangler preview base-config secret put VAPID_PRIVATE_KEY
+npx wrangler preview base-config secret put VAPID_SUBJECT
+```
+
+ベースのSecretは、その後に新しく作成されるプレビューへ適用されます。すでに作成済みのプレビューには `npx wrangler preview secret put VAPID_PUBLIC_KEY --name <プレビュー名>` のように3項目を個別登録してください。通知を使用しないプレビューではVAPIDキーは不要で、通知設定画面には未設定と表示されます。
+
+設定の変更を対象ブランチへ反映した後、Cloudflareで失敗したビルドを再実行してください。将来のブランチでも設定が引き継がれるよう、通常のマージ手順で `develop` と `main` にも取り込みます。
+
+参考: [Cloudflare Previews の設定](https://developers.cloudflare.com/workers/previews/configuration/)、[Durable Objects の分離](https://developers.cloudflare.com/workers/previews/resources/#durable-objects)。
+
 ## 開発フェーズ
 
 | フェーズ | 内容 | 状態 |
