@@ -26,7 +26,7 @@ beforeEach(/* 各テストの前に使用するDBテーブルを空にし、以�
 /** スプリント操作テスト用にプロジェクトと初期ステータスを用意する。 */
 async function setup() {
   const p = await createProject({ key: 'APP', name: 'App' })
-  const [todo, doing, done] = (await getWorkflow(p.workflowId))!.statuses
+  const [todo, doing, , done] = (await getWorkflow(p.workflowId))!.statuses
   return { p, todo, doing, done }
 }
 

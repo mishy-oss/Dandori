@@ -9,7 +9,7 @@ const OPTIONS: { value: ThemeSetting; label: string }[] = [
   { value: 'dark', label: 'ダーク' },
 ]
 
-/** タイムライン設定・PWA通知設定・テーマ選択をまとめて表示する。 */
+/** 各種設定と、種別・ステータスの簡単な使い方を表示する。 */
 export function SettingsScreen() {
   const theme = useThemeStore(/* ストアからテーマを取得する。 */ (s) => s.theme)
   const setTheme = useThemeStore(/* ストアからsetTheme（保存・状態変更の操作）を取得する。 */ (s) => s.setTheme)
@@ -38,6 +38,25 @@ export function SettingsScreen() {
           ))}
         </div>
       </div>
+      <section aria-labelledby="task-guide-heading" className="rounded-xl border border-border bg-surface p-4">
+        <h2 id="task-guide-heading" className="mb-3 text-sm font-semibold text-muted">種別とステータスの使い方</h2>
+        <h3 className="mb-2 text-sm font-semibold">種別：何の作業か</h3>
+        <dl className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm">
+          <dt className="font-medium">task</dt><dd className="text-muted">普段の作業や予定。資料作成・会議など。</dd>
+          <dt className="font-medium">bug</dt><dd className="text-muted">不具合の修正。</dd>
+          <dt className="font-medium">story</dt><dd className="text-muted">実現したい機能や目的。</dd>
+          <dt className="font-medium">epic</dt><dd className="text-muted">複数の子タスクをまとめる大きなテーマ。</dd>
+        </dl>
+        <p className="mt-2 text-xs text-muted">迷ったらtaskで大丈夫です。</p>
+        <h3 className="mb-2 mt-4 text-sm font-semibold">ステータス：作業の状態</h3>
+        <dl className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm">
+          <dt className="font-medium">To Do</dt><dd className="text-muted">未着手・未配置の作業。</dd>
+          <dt className="font-medium">In Progress</dt><dd className="text-muted">進行中の作業。通常タスクを予定に配置すると切り替わります。</dd>
+          <dt className="font-medium">Recurring</dt><dd className="text-muted">会議など決まった時間の予定。必要なら繰り返しも設定します。</dd>
+          <dt className="font-medium">Done</dt><dd className="text-muted">完了した作業。</dd>
+        </dl>
+        <p className="mt-3 text-xs text-muted">例：定例会議は「task」＋「Recurring」にします。</p>
+      </section>
     </Screen>
   )
 }
