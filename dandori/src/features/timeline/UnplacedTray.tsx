@@ -1,5 +1,6 @@
 import type { Issue } from '../../db/types'
-import { formatIssueNumber } from '../../lib/issueNumber'
+import { Icon } from '../../app/Icon'
+import { taskAppearance } from './taskAppearance'
 import type { TimelineDrag } from './useTimelineGestures'
 
 /** アクティブスプリントの未配置Issueを横並びで表示し、編集とタイムラインへのドラッグ配置を受け付ける。 */
@@ -19,19 +20,19 @@ export function UnplacedTray({
   const ghost = drag?.kind === 'tray' ? issues.find(/* 指定IDと一致という条件を最初に満たす要素を探す。 */ (i) => i.id === drag.id) : undefined
 
   return (
-    <section aria-label="未配置のIssue" className="flex flex-col gap-1">
-      <h2 className="text-xs font-semibold text-muted">
-        未配置{issues.length > 0 ? `(${issues.length})` : ''}
-        <span className="ml-2 font-normal">長押しでタイムラインへドラッグ / タップで時刻を入力</span>
+    <section aria-label="未配置のIssue" className="flex shrink-0 flex-col gap-3 px-5 pb-4 pt-5">
+      <h2 className="flex items-center justify-between text-[10px] font-medium tracking-wide text-muted">
+        あとで予定する{issues.length > 0 ? ` · ${issues.length}` : ''}
+        {issues.length > 0 && <span className="font-normal">長押しでタイムラインへ</span>}
       </h2>
       {issues.length === 0 ? (
-        <p className="rounded-lg border border-dashed border-border p-2 text-center text-xs text-muted">
+        <p className="pb-1 text-[11px] text-muted">
           {hasSprint ? '未配置のスプリントIssueはありません' : 'アクティブスプリントのIssueがここに並びます'}
         </p>
       ) : (
-        <ul className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
+        <ul className="-mx-2 flex gap-3 overflow-x-auto px-2 pb-1">
           {issues.map(/* 各Issueの表示要素を作り、対応する選択・編集操作を結び付ける。 */ (i) => (
-            <li key={i.id} className="shrink-0">
+            <li key={i.id} className="w-[76px] shrink-0">
               <div
                 role="button"
                 tabIndex={0}
@@ -46,15 +47,12 @@ export function UnplacedTray({
                   }
                 }}
                 onContextMenu={/* 長押しや右クリックによる標準メニューを抑止し、ジェスチャー操作を続けられるようにする。 */ (e) => e.preventDefault()}
-                className={`flex min-h-11 max-w-48 touch-pan-x select-none flex-col justify-center rounded-lg border border-border bg-surface px-3 py-1 [-webkit-touch-callout:none] ${
+                className={`flex w-full touch-pan-x select-none flex-col items-center gap-2 rounded-2xl py-1 text-center [-webkit-touch-callout:none] ${
                   ghost?.id === i.id ? 'opacity-40' : ''
                 }`}
-                style={{ borderLeft: `4px solid ${i.color}` }}
               >
-                <span className="text-[10px] text-muted">
-                  {formatIssueNumber(i.number)} · {i.durationMin}分
-                </span>
-                <span className="truncate text-sm">{i.title}</span>
+                <span aria-hidden className="flex size-12 shrink-0 items-center justify-center rounded-full text-white" style={{ background: taskAppearance(i).color }}><Icon name={taskAppearance(i).icon} className="size-6" /></span>
+                <span className="line-clamp-2 text-[11px] font-medium leading-snug">{i.title}</span>
               </div>
             </li>
           ))}
@@ -64,7 +62,7 @@ export function UnplacedTray({
       {drag?.kind === 'tray' && ghost && (
         <div
           aria-hidden
-          className="pointer-events-none fixed z-50 max-w-48 -translate-x-1/2 -translate-y-1/2 truncate rounded-lg border border-accent bg-surface px-3 py-2 text-sm shadow-xl"
+          className="pointer-events-none fixed z-50 max-w-48 -translate-x-1/2 -translate-y-1/2 truncate rounded-full border border-accent bg-surface px-4 py-3 text-sm shadow-xl"
           style={{ left: drag.x, top: drag.y }}
         >
           {ghost.title}
