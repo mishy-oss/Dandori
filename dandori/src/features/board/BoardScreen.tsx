@@ -205,6 +205,7 @@ export function BoardScreen() {
             return <li key={group.key}>
               <RecurringBoardCard
                 group={group}
+                relatedIssues={allIssues}
                 rule={recurrenceRules.find(/* グループの頻度と間隔を取得する。 */ (rule) => rule.id === issue.recurrenceId)}
                 statuses={statuses}
                 doneIds={doneIds}
@@ -225,6 +226,8 @@ export function BoardScreen() {
             <li key={group.key}>
               <BoardCard
                 issue={issue}
+                relatedIssues={allIssues}
+                doneIds={doneIds}
                 done={doneIds.has(issue.statusId)}
                 pulse={pulseId === issue.id}
                 swipeDx={swipeHere?.dx}

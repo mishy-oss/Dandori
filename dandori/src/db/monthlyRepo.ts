@@ -3,6 +3,7 @@ import { getProject, getWorkflow } from './projectRepo'
 import { expandRecurrenceInMonth } from './recurrenceRepo'
 import { isValidMonth, issueMonth } from '../lib/month'
 import { todayStr } from '../lib/date'
+import { syncParentStatuses } from './issueRepo'
 import type { Issue, MonthlySnapshot } from './types'
 
 /** Epicと子を持つ親を除き、対象月の作業単位だけを集計する。 */
@@ -38,6 +39,8 @@ export async function prepareMonthlyProject(projectId: string, selectedMonth: st
       await expandRecurrenceInMonth(source, month, Date.now())
       if (selectedMonth !== month) await expandRecurrenceInMonth(source, selectedMonth, Date.now())
     }
+    await syncParentStatuses((await db.issues.where('projectId').equals(projectId).toArray())
+      .filter((issue) => issue.deletedAt === null).map((issue) => issue.parentId), Date.now())
     const issues = await db.issues.where('projectId').equals(projectId).toArray()
     const summary = monthlyWork(issues, month, doneIds)
     await db.monthlySnapshots.put({ id: `${projectId}:${today}`, projectId, month, date: today, ...summary })

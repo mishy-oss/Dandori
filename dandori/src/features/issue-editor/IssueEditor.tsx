@@ -69,6 +69,8 @@ export function IssueEditor({
   const [error, setError] = useState<string | null>(null)
   const [childTitle, setChildTitle] = useState('')
   const [addingChild, setAddingChild] = useState(false)
+  const [relatedIssueId, setRelatedIssueId] = useState<string | null>(null)
+  const relatedIssue = issues.find((item) => item.id === relatedIssueId)
   const issueId = issue?.id
 
   /** 親候補に自分の子孫を出さないため、子Issueをたどって全子孫のIDを集める。 */
@@ -182,7 +184,7 @@ export function IssueEditor({
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex items-end bg-black/50" onClick={onClose}>
+    <><div className={`${relatedIssue ? 'hidden' : 'flex'} fixed inset-0 z-40 items-end bg-black/50`} onClick={onClose}>
       <form
         role="dialog"
         aria-modal="true"
@@ -355,6 +357,8 @@ export function IssueEditor({
                 </option>
               ))}
             </select>
+            {parentId && <button type="button" className="min-h-11 text-left text-xs text-accent"
+              onClick={/* 親の編集を重ねて開き、戻ったときは入力中の内容を保持する。 */ () => setRelatedIssueId(parentId)}>親タスクを編集</button>}
           </label>
           <label className="col-span-2 flex flex-col gap-1 text-sm text-muted">
             通知
@@ -428,12 +432,14 @@ export function IssueEditor({
             <legend className="px-1 text-sm font-semibold text-muted">
               子Issue / サブタスク ({children.length})
             </legend>
+            {children.length > 0 && <p className="text-xs text-muted">親のステータスは子タスクの進捗に連動します。子タスクを押すと編集できます。</p>}
             {children.length > 0 ? (
               <ul className="flex flex-col gap-1">
                 {children.map(/* 各子Issueの表示要素を作り、対応する選択・編集操作を結び付ける。 */ (child) => (
                   <li key={child.id} className="flex items-center gap-2 rounded-lg bg-surface-2 px-3 py-2 text-sm">
                     <span className="shrink-0 text-xs text-muted">{child.type === 'epic' ? 'Epic' : child.type} · {formatIssueNumber(child.number)}</span>
-                    <span className="min-w-0 flex-1 truncate">{child.title}</span>
+                    <button type="button" aria-label={`${child.title}を編集`} className="min-h-11 min-w-0 flex-1 truncate text-left text-accent"
+                      onClick={/* 子の編集を重ねて開き、閉じると親の入力内容へ戻る。 */ () => setRelatedIssueId(child.id)}>{child.title}</button>
                     <span className="shrink-0 text-xs text-muted">{workflow?.statuses.find(/* 指定IDと一致という条件を最初に満たす要素を探す。 */ (s) => s.id === child.statusId)?.name}</span>
                   </li>
                 ))}
@@ -527,5 +533,8 @@ export function IssueEditor({
         </div>
       </form>
     </div>
+    {relatedIssue && <IssueEditor key={relatedIssue.id} issue={relatedIssue}
+      onClose={/* 関連タスクの編集を閉じて元の編集画面に戻す。 */ () => setRelatedIssueId(null)} />}
+    </>
   )
 }
