@@ -24,11 +24,11 @@ const byId = (l: ReturnType<typeof layoutBlocks>) => Object.fromEntries(l.map(/*
 describe('coordinates', /* 「coordinates」に関するテストをまとめて定義する。 */ () => {
   it('converts minutes to y and back with 15-minute snapping', /* 時刻とY座標を相互変換でき、座標から求めた時刻が15分刻みになることを検証する。 */ () => {
     expect(minToY(360, range)).toBe(0)
-    expect(minToY(420, range)).toBeCloseTo(72)
+    expect(minToY(420, range)).toBeCloseTo(168)
     expect(yToMin(0, range)).toBe(360)
-    expect(yToMin(72, range)).toBe(420)
-    expect(yToMin(72 + 5, range)).toBe(420)
-    expect(yToMin(72 + 12, range)).toBe(435)
+    expect(yToMin(168, range)).toBe(420)
+    expect(yToMin(168 + 14, range)).toBe(420)
+    expect(yToMin(168 + 28, range)).toBe(435)
   })
 
   it('snaps and clamps moves and resizes', /* 移動やリサイズが15分刻みと表示範囲・最短時間の制約に従うことを検証する。 */ () => {
