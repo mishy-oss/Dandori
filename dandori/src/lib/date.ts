@@ -1,4 +1,5 @@
-import { addDays, differenceInCalendarWeeks, format, getDay, parseISO, startOfWeek } from 'date-fns'
+import { addDays, addMonths, differenceInCalendarWeeks, format, getDay, getDaysInMonth, parseISO, startOfWeek } from 'date-fns'
+import type { RecurrenceFrequency } from '../db/types'
 
 export const DATE_FORMAT = 'yyyy-MM-dd'
 
@@ -12,12 +13,18 @@ export function addDaysStr(date: string, days: number): string {
   return format(addDays(parseISO(date), days), DATE_FORMAT)
 }
 
-/** 日単位または週単位の間隔を日数へ換算して、次回の繰り返し日を求める。 */
+/** 日・週・月の間隔から次回の日付を求める。毎月は開始日の日にちを維持し、その日がない月だけ月末へ補正する。 */
 export function nextRecurrenceDate(
   date: string,
-  frequency: 'daily' | 'weekly',
+  frequency: RecurrenceFrequency,
   interval: number,
+  startDate: string = date,
 ): string {
+  if (frequency === 'monthly') {
+    const next = addMonths(parseISO(date), interval)
+    next.setDate(Math.min(parseISO(startDate).getDate(), getDaysInMonth(next)))
+    return format(next, DATE_FORMAT)
+  }
   return addDaysStr(date, frequency === 'daily' ? interval : interval * 7)
 }
 
