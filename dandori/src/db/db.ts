@@ -1,5 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie'
-import type { Issue, Project, RecurrenceRule, Settings, Sprint, Workflow } from './types'
+import type { Issue, Project, RecurrenceRule, Settings, Sprint, Workflow, MonthlySnapshot } from './types'
 
 export class DandoriDB extends Dexie {
   projects!: EntityTable<Project, 'id'>
@@ -8,8 +8,9 @@ export class DandoriDB extends Dexie {
   recurrenceRules!: EntityTable<RecurrenceRule, 'id'>
   sprints!: EntityTable<Sprint, 'id'>
   settings!: EntityTable<Settings, 'id'>
+  monthlySnapshots!: EntityTable<MonthlySnapshot, 'id'>
 
-  /** IndexedDBの各テーブルと検索インデックスを定義し、バージョン1から5までのスキーマ更新を登録する。 */
+  /** IndexedDBのテーブルと検索インデックスを定義する。旧データを残し、バージョン6で月次実績の保存先を追加する。 */
   constructor(name = 'dandori') {
     super(name)
     this.version(1).stores({
@@ -30,6 +31,9 @@ export class DandoriDB extends Dexie {
     this.version(5).stores({
       issues:
         'id, projectId, statusId, sprintId, parentId, date, rank, updatedAt, deletedAt, recurrenceId, [projectId+number]',
+    })
+    this.version(6).stores({
+      monthlySnapshots: 'id, projectId, month, date, [projectId+month]',
     })
   }
 }

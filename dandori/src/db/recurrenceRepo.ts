@@ -4,12 +4,46 @@ import { nextRecurrenceDate, nextWeeklyRecurrenceDate } from '../lib/date'
 import { newId } from '../lib/id'
 import { getProject, getWorkflow } from './projectRepo'
 import { rankAfter } from '../lib/rank'
+import { monthRange } from '../lib/month'
 
 /** 曜日指定の毎週、または日・週・月の間隔で次回日を求める。毎月の日にちはルールの開始日を基準にする。 */
 function nextDate(rule: RecurrenceRule, date: string): string {
   return rule.frequency === 'weekly' && rule.weekdays?.length
     ? nextWeeklyRecurrenceDate(date, rule.weekdays, rule.interval, rule.startDate)
     : nextRecurrenceDate(date, rule.frequency, rule.interval, rule.startDate)
+}
+
+/** スプリントを作らず、選択月の範囲にある繰り返し回を生成する。同じルール・日付の既存回は重複させない。 */
+export async function expandRecurrenceInMonth(source: Issue, month: string, timestamp: number): Promise<void> {
+  if (!source.recurrenceId) return
+  const rule = await db.recurrenceRules.get(source.recurrenceId)
+  if (!rule?.active) return
+  const { startDate, endDate } = monthRange(month)
+  let cursor = rule.startDate
+  while (cursor < startDate) cursor = nextDate(rule, cursor)
+  const project = await getProject(source.projectId)
+  const workflow = project && await getWorkflow(project.workflowId)
+  const todo = workflow?.statuses.find(/* 新しい回は未着手ステータスに置く。 */ (status) => status.category === 'todo')
+  if (!project || !todo) return
+  const existing = await db.issues.where('recurrenceId').equals(rule.id).toArray()
+  const dates = new Set(existing.map(/* 削除した回も記録として残し、同じ日を勝手に再生成しない。 */ (issue) => issue.date))
+  const all = await db.issues.where('projectId').equals(project.id).toArray()
+  let rank = all.filter(/* 未着手列の末尾を求める。 */ (issue) => issue.deletedAt === null && issue.statusId === todo.id).reduce<string | null>(/* 最大の並び順キーを選ぶ。 */ (last, issue) => last === null || issue.rank > last ? issue.rank : last, null)
+  let number = project.nextNumber
+  while (cursor <= endDate && (!rule.endDate || cursor <= rule.endDate)) {
+    if (!dates.has(cursor)) {
+      if (source.date === null && source.planningMonth === month) {
+        await db.issues.update(source.id, { date: cursor, updatedAt: timestamp })
+        source = { ...source, date: cursor }
+      } else {
+        rank = rankAfter(rank)
+        await db.issues.add({ ...source, id: newId(), number: number++, sprintId: null, legacySprintId: null, planningMonth: month, statusId: todo.id, rank, date: cursor, dueDate: source.dueDate === source.date ? cursor : source.dueDate, completedAt: null, createdAt: timestamp, updatedAt: timestamp, deletedAt: null })
+      }
+      dates.add(cursor)
+    }
+    cursor = nextDate(rule, cursor)
+  }
+  if (number !== project.nextNumber) await db.projects.update(project.id, { nextNumber: number, updatedAt: timestamp })
 }
 
 /** Materialize this recurring task's remaining occurrences within its sprint. */

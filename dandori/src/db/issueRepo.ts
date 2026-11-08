@@ -5,7 +5,8 @@ import { validateSchedule } from '../lib/schedule'
 import { isValidDateStr, nextRecurrenceDate, nextWeeklyRecurrenceDate, todayStr } from '../lib/date'
 import { getProject, getWorkflow } from './projectRepo'
 import { getSprint } from './sprintRepo'
-import { expandRecurrenceInSprint } from './recurrenceRepo'
+import { expandRecurrenceInSprint, expandRecurrenceInMonth } from './recurrenceRepo'
+import { isValidMonth, issueMonth, currentMonth } from '../lib/month'
 import type { Issue, IssueType, Priority, RecurrenceFrequency, RecurrenceRule } from './types'
 
 export interface RecurrenceInput {
@@ -27,6 +28,7 @@ export interface CreateIssueInput {
   dueDate?: string | null
   estimateMin?: number | null
   sprintId?: string | null
+  planningMonth?: string
   date?: string | null
   startMin?: number | null
   durationMin?: number
@@ -123,6 +125,7 @@ export async function listRecurrenceRules(projectId: string): Promise<Recurrence
 export async function createIssue(input: CreateIssueInput): Promise<Issue> {
   const title = input.title.trim()
   if (!title) throw new Error('タイトルを入力してください')
+  if (input.planningMonth !== undefined && !isValidMonth(input.planningMonth)) throw new Error('対象月を正しく指定してください')
 
   return db.transaction(
     'rw', db.projects, db.workflows, db.issues, db.sprints, db.recurrenceRules,
@@ -147,7 +150,7 @@ export async function createIssue(input: CreateIssueInput): Promise<Issue> {
 
     if (input.parentId) await validateParent(project.id, input.parentId)
 
-    const recurrenceStartDate = input.date ?? todayStr()
+    const recurrenceStartDate = input.date ?? (input.planningMonth && input.planningMonth !== currentMonth() ? `${input.planningMonth}-01` : todayStr())
     const recurrenceValues = input.recurrence
       ? normalizeRecurrence(input.recurrence, recurrenceStartDate)
       : null
@@ -178,6 +181,7 @@ export async function createIssue(input: CreateIssueInput): Promise<Issue> {
       dueDate: input.dueDate ?? null,
       estimateMin: input.estimateMin ?? null,
       sprintId: input.sprintId ?? null,
+      planningMonth: input.planningMonth,
       rank: await nextRankInStatus(project.id, statusId),
       date: input.date ?? (recurrenceRule ? recurrenceStartDate : null),
       startMin: input.startMin ?? null,
@@ -202,6 +206,7 @@ export async function createIssue(input: CreateIssueInput): Promise<Issue> {
       const sprint = await getSprint(issue.sprintId)
       if (sprint) await expandRecurrenceInSprint(issue, sprint, t)
     }
+    if (recurrenceRule && issue.planningMonth && !issue.sprintId) await expandRecurrenceInMonth(issue, issue.planningMonth, t)
     return issue
     },
   )
@@ -213,6 +218,7 @@ export async function updateIssue(
   patch: IssuePatch,
 ): Promise<Issue> {
   const { recurrence: recurrencePatch, ...issuePatch } = patch
+  if (issuePatch.planningMonth !== undefined && !isValidMonth(issuePatch.planningMonth)) throw new Error('対象月を正しく指定してください')
   const title = issuePatch.title?.trim()
   if (issuePatch.title !== undefined && !title) {
     throw new Error('タイトルを入力してください')
@@ -230,6 +236,7 @@ export async function updateIssue(
       ...(title !== undefined && { title }),
       updatedAt: t,
     }
+    if (issuePatch.date && issuePatch.planningMonth === undefined && current.planningMonth) next.planningMonth = issuePatch.date.slice(0, 7)
     validateSchedule(next.date, next.startMin, next.durationMin)
 
     if (recurrencePatch !== undefined) {
@@ -280,6 +287,9 @@ export async function updateIssue(
       const sprint = await getSprint(next.sprintId)
       if (sprint) await expandRecurrenceInSprint(next, sprint, t)
     }
+    if (next.planningMonth && !next.sprintId && next.recurrenceId && (recurrencePatch !== undefined || issuePatch.planningMonth !== undefined)) {
+      await expandRecurrenceInMonth(next, next.planningMonth, t)
+    }
     if (transitionedToDone) await createNextOccurrence(next, t)
     return next
   })
@@ -305,7 +315,7 @@ async function createNextOccurrence(completed: Issue, timestamp: number): Promis
   const alreadyExists = await db.issues
     .where('recurrenceId')
     .equals(rule.id)
-    .filter(/* 未削除・指定日と一致という条件を満たす要素だけを残す。 */ (issue) => issue.deletedAt === null && issue.date === nextDate)
+    .filter(/* 月管理では削除した回の再生成も防ぐ。旧データは従来の重複判定を維持する。 */ (issue) => (completed.planningMonth !== undefined || issue.deletedAt === null) && issue.date === nextDate)
     .first()
   if (alreadyExists) return
 
@@ -320,6 +330,7 @@ async function createNextOccurrence(completed: Issue, timestamp: number): Promis
     number: project.nextNumber,
     statusId: todoStatus.id,
     sprintId: null,
+    planningMonth: completed.planningMonth ? nextDate.slice(0, 7) : undefined,
     rank: await nextRankInStatus(project.id, todoStatus.id),
     date: nextDate,
     dueDate: completed.dueDate === currentDate ? nextDate : completed.dueDate,
@@ -358,6 +369,7 @@ export async function moveIssue(
   statusId: string,
   index: number,
   scopeSprintId?: string | null,
+  scopeMonth?: string,
 ): Promise<Issue> {
   return db.transaction('rw', db.projects, db.workflows, db.issues, db.sprints, db.recurrenceRules, /* 関連テーブルの確認と更新を一括で実行し、途中で失敗した場合は変更を巻き戻す。 */ async () => {
     const current = await getIssue(id)
@@ -373,7 +385,7 @@ export async function moveIssue(
       await db.issues.where('projectId').equals(current.projectId).toArray(),
       statusId,
     )
-      .filter(/* 移動対象自身を除外し、スプリントの指定がある場合は同じ所属のIssueだけに絞る。 */ (i) => i.id !== id && (scopeSprintId === undefined || i.sprintId === scopeSprintId))
+      .filter(/* 指定された対象月または旧所属の範囲で挿入位置を求める。 */ (i) => i.id !== id && (scopeSprintId === undefined || i.sprintId === scopeSprintId) && (scopeMonth === undefined || issueMonth(i) === scopeMonth))
       .sort(compareRank)
     const at = Math.max(0, Math.min(index, others.length))
 

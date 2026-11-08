@@ -1,73 +1,27 @@
 import { useState } from 'react'
 import { Sheet } from '../../app/Sheet'
-import type { Issue, Sprint } from '../../db/types'
+import type { Issue } from '../../db/types'
+import { issueMonth, isValidMonth } from '../../lib/month'
 import { formatIssueNumber } from '../../lib/issueNumber'
 import { useDataStore } from '../../store/data'
 
-/** 移動対象のIssueと、バックログ・完了していないスプリントの候補を選択ダイアログに表示する。 */
-export function MoveSheet({
-  issue,
-  sprints,
-  onClose,
-}: {
-  issue: Issue
-  sprints: Sprint[]
-  onClose: () => void
-}) {
-  const assign = useDataStore(/* ストアからassignIssueToSprint（保存・状態変更の操作）を取得する。 */ (s) => s.assignIssueToSprint)
+/** タスクを管理する対象月を変更する。月外の時刻配置は解除し、未完了の過去月指定は今月へ繰り越される。 */
+export function MoveSheet({ issue, onClose }: { issue: Issue; onClose: () => void }) {
+  const assign = useDataStore(/* 対象月変更の保存処理を取得する。 */ (state) => state.assignIssueToMonth)
+  const [month, setMonth] = useState(issueMonth(issue))
   const [error, setError] = useState<string | null>(null)
-
-  /** Issueを選択したスプリントまたはバックログへ移動し、成功時に移動先選択を閉じる。 */
-  async function move(sprintId: string | null) {
-    try {
-      await assign(issue.id, sprintId)
-      onClose()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    }
+  const [busy, setBusy] = useState(false)
+  /** 選択された対象月を保存し、成功後に画面を閉じる。 */
+  async function save() {
+    setBusy(true)
+    try { await assign(issue.id, month); onClose() } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)) } finally { setBusy(false) }
   }
-
-  const targets = sprints.filter(/* 完了済み以外という条件を満たす要素だけを残す。 */ (s) => s.state !== 'closed')
-
-  return (
-    <Sheet label="移動先を選択" onClose={onClose}>
-      <h2 className="text-lg font-bold">
-        {formatIssueNumber(issue.number)} の移動先
-      </h2>
-      <p className="-mt-2 truncate text-sm text-muted">{issue.title}</p>
-      <ul className="flex flex-col gap-2">
-        <li>
-          <button
-            disabled={issue.sprintId === null}
-            onClick={/* 選択した移動先へIssueを移す処理を呼び出す。 */ () => void move(null)}
-            className="min-h-11 w-full rounded-lg border border-border px-3 text-left disabled:opacity-40"
-          >
-            バックログ
-          </button>
-        </li>
-        {targets.map(/* 各移動先スプリントの表示要素を作り、対応する選択・編集操作を結び付ける。 */ (s) => (
-          <li key={s.id}>
-            <button
-              disabled={issue.sprintId === s.id}
-              onClick={/* 選択した移動先へIssueを移す処理を呼び出す。 */ () => void move(s.id)}
-              className="min-h-11 w-full rounded-lg border border-border px-3 text-left disabled:opacity-40"
-            >
-              {s.name}
-              <span className="ml-2 text-xs text-muted">
-                {s.state === 'active' ? 'アクティブ' : '計画中'} · {s.startDate} 〜 {s.endDate}
-              </span>
-            </button>
-          </li>
-        ))}
-      </ul>
-      {error && (
-        <p role="alert" className="text-sm text-red-500">
-          {error}
-        </p>
-      )}
-      <button className="min-h-11 rounded-lg border border-border text-sm" onClick={onClose}>
-        キャンセル
-      </button>
-    </Sheet>
-  )
+  return <Sheet label="対象月を変更" onClose={onClose}>
+    <h2 className="text-lg font-bold">対象月を変更</h2>
+    <p className="text-sm text-muted">{formatIssueNumber(issue.number)} · {issue.title}</p>
+    <label className="text-sm text-muted">対象月<input aria-label="変更先の対象月" type="month" className="mt-1 block min-h-11 w-full rounded-xl border border-border bg-surface-2 px-3" value={month} onChange={/* 変更先の月を選ぶ。 */ (event) => setMonth(event.target.value)} /></label>
+    <p className="text-xs text-muted">別の月に移す場合、元の時刻配置は解除します。過去月に残る未完了タスクは今月へ自動で繰り越します。</p>
+    {error && <p role="alert" className="text-xs text-red-500">{error}</p>}
+    <div className="flex gap-2"><button type="button" className="min-h-11 flex-1 rounded-xl border border-border text-sm" onClick={onClose}>キャンセル</button><button type="button" disabled={busy || !isValidMonth(month)} className="min-h-11 flex-1 rounded-xl bg-accent text-sm text-accent-text disabled:opacity-40" onClick={/* 対象月の変更を確定する。 */ () => void save()}>変更する</button></div>
+  </Sheet>
 }

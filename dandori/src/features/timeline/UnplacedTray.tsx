@@ -3,17 +3,15 @@ import { Icon } from '../../app/Icon'
 import { taskAppearance } from './taskAppearance'
 import type { TimelineDrag } from './useTimelineGestures'
 
-/** アクティブスプリントの未配置Issueを横並びで表示し、編集とタイムラインへのドラッグ配置を受け付ける。 */
+/** 選択月の未配置タスクを横並びで表示し、編集とタイムラインへの配置を受け付ける。 */
 export function UnplacedTray({
   issues,
   drag,
-  hasSprint,
   onOpen,
   shouldSuppressClick,
 }: {
   issues: Issue[]
   drag: TimelineDrag | null
-  hasSprint: boolean
   onOpen: (issue: Issue) => void
   shouldSuppressClick: () => boolean
 }) {
@@ -27,7 +25,7 @@ export function UnplacedTray({
       </h2>
       {issues.length === 0 ? (
         <p className="pb-1 text-[11px] text-muted">
-          {hasSprint ? '未配置のスプリントIssueはありません' : 'アクティブスプリントのIssueがここに並びます'}
+          この月の未配置タスクはありません
         </p>
       ) : (
         <ul className="-mx-2 flex gap-3 overflow-x-auto px-2 pb-1">
