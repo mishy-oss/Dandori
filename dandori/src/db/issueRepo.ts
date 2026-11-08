@@ -47,6 +47,9 @@ function activeInStatus(issues: Issue[], statusId: string): Issue[] {
 
 /** 繰り返し間隔・終了日・曜日を検証し、保存用の有効な繰り返しルールを組み立てる。不正な入力はエラーにする。 */
 function normalizeRecurrence(input: RecurrenceInput, startDate: string): Omit<RecurrenceRule, 'id' | 'projectId' | 'createdAt' | 'updatedAt'> {
+  if (!['daily', 'weekly', 'monthly'].includes(input.frequency)) {
+    throw new Error('繰り返し頻度を正しく選択してください')
+  }
   if (!Number.isInteger(input.interval) || input.interval < 1 || input.interval > 365) {
     throw new Error('繰り返し間隔は1〜365で指定してください')
   }
@@ -296,7 +299,7 @@ async function createNextOccurrence(completed: Issue, timestamp: number): Promis
   const nextDate =
     rule.frequency === 'weekly' && rule.weekdays?.length
       ? nextWeeklyRecurrenceDate(currentDate, rule.weekdays, rule.interval, rule.startDate)
-      : nextRecurrenceDate(currentDate, rule.frequency, rule.interval)
+      : nextRecurrenceDate(currentDate, rule.frequency, rule.interval, rule.startDate)
   if (rule.endDate && nextDate > rule.endDate) return
 
   const alreadyExists = await db.issues

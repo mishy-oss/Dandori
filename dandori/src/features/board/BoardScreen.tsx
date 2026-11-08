@@ -7,12 +7,15 @@ import { SprintOverdueBanner } from '../sprint/SprintOverdueBanner'
 import { BoardCard } from './BoardCard'
 import { wipStatus } from './boardLogic'
 import { useBoardGestures } from './useBoardGestures'
+import { groupBoardIssues, groupedDropIndex, type BoardIssueGroup } from './recurringGroups'
+import { RecurringBoardCard } from './RecurringBoardCard'
 
 // アクティブスプリントのIssueだけを表示するカンバン
 export function BoardScreen() {
   const project = useDataStore(selectCurrentProject)
   const workflow = useDataStore(/* 現在のプロジェクトに対応するワークフローをストアから取得する。 */ (s) => (project ? s.workflows[project.workflowId] : undefined))
   const allIssues = useDataStore(/* ストアからIssueを取得する。 */ (s) => s.issues)
+  const recurrenceRules = useDataStore(/* カードに表示する繰り返し頻度を取得する。 */ (s) => s.recurrenceRules)
   const sprint = useDataStore(selectActiveSprint)
   const ready = useDataStore(/* ストアから初期化の完了状態を取得する。 */ (s) => s.ready)
   const moveIssue = useDataStore(/* ストアからmoveIssue（保存・状態変更の操作）を取得する。 */ (s) => s.moveIssue)
@@ -36,6 +39,8 @@ export function BoardScreen() {
     () => new Set(statuses.filter(/* 完了カテゴリという条件を満たす要素だけを残す。 */ (s) => s.category === 'done').map(/* 各要素からIDだけを取り出す。 */ (s) => s.id)),
     [statuses],
   )
+  /** ステータスをまたぐ繰り返しも1枚にし、次の未完了回のステータスをカードの所属列にする。 */
+  const groups = useMemo(() => groupBoardIssues(issues, doneIds), [issues, doneIds])
   const activeIndex = Math.min(columnIndex, Math.max(statuses.length - 1, 0))
   const active = statuses[activeIndex]
 
@@ -81,8 +86,13 @@ export function BoardScreen() {
       const latest = useDataStore.getState().issues
       void move(id, target, columnIssues(latest, statuses[target].id, sprint?.id).length)
     },
-    /** ドロップ先のステータス列と挿入位置を受け取り、Issueの移動を保存する。 */
-    onDrop: (id, col, index) => void move(id, col, index),
+    /** 表示上のカード数から、非表示の繰り返し回も含む保存先列の挿入位置を求める。 */
+    onDrop: (id, col, index) => {
+      const status = statuses[col]
+      if (!status || !sprint) return
+      const latest = useDataStore.getState().issues.filter(/* 現在のスプリント内だけで位置を計算する。 */ (issue) => issue.sprintId === sprint.id)
+      void move(id, col, groupedDropIndex(latest, doneIds, id, status.id, index))
+    },
   })
 
   if (!ready || !project || !active) return null
@@ -98,25 +108,26 @@ export function BoardScreen() {
     )
   }
 
-  const column = columnIssues(issues, active.id)
-  const wip = wipStatus(column.length, active.wipLimit)
-  const draggedIssue = drag ? issues.find(/* 指定IDと一致という条件を最初に満たす要素を探す。 */ (i) => i.id === drag.issueId) : undefined
+  const column = groups.filter(/* 次の未完了回が現在の列にあるカードを表示する。 */ (group) => group.issue.statusId === active.id)
+  const actualCount = columnIssues(issues, active.id).length
+  const wip = wipStatus(actualCount, active.wipLimit)
+  const draggedGroup = drag ? groups.find(/* 列をまたいでもドラッグ対象のカードを維持する。 */ (group) => group.issue.id === drag.issueId) : undefined
 
   // ドラッグ中のカードは列が切り替わっても同じ <ul> に残し、タッチ操作の対象要素を維持する
-  const base = draggedIssue && !column.includes(draggedIssue) ? [...column, draggedIssue] : column
-  const rows: Array<{ kind: 'card'; issue: Issue } | { kind: 'placeholder' }> = []
+  const base = draggedGroup && !column.includes(draggedGroup) ? [...column, draggedGroup] : column
+  const rows: Array<{ kind: 'card'; group: BoardIssueGroup } | { kind: 'placeholder' }> = []
   let seen = 0
   let placed = false
-  for (const issue of base) {
-    if (drag && issue.id === drag.issueId) {
-      rows.push({ kind: 'card', issue })
+  for (const group of base) {
+    if (drag && group.issue.id === drag.issueId) {
+      rows.push({ kind: 'card', group })
       continue
     }
     if (drag && !placed && seen === dropIndex) {
       rows.push({ kind: 'placeholder' })
       placed = true
     }
-    rows.push({ kind: 'card', issue })
+    rows.push({ kind: 'card', group })
     seen++
   }
   if (drag && !placed) rows.push({ kind: 'placeholder' })
@@ -134,8 +145,8 @@ export function BoardScreen() {
 
       <div role="tablist" aria-label="ステータス" className="-mx-4 flex gap-2 overflow-x-auto px-4">
         {statuses.map(/* 各ステータスの表示要素を作り、対応する選択・編集操作を結び付ける。 */ (s, i) => {
-          const count = columnIssues(issues, s.id).length
-          const over = wipStatus(count, s.wipLimit).over
+          const count = groups.filter(/* 表示されるカードの数をステータス別に集計する。 */ (group) => group.issue.statusId === s.id).length
+          const over = wipStatus(columnIssues(issues, s.id).length, s.wipLimit).over
           return (
             <button
               key={s.id}
@@ -161,7 +172,7 @@ export function BoardScreen() {
 
       {wip.over && (
         <p role="status" className="rounded-lg border border-amber-500 bg-amber-500/10 p-3 text-sm">
-          ⚠ WIP上限({active.wipLimit}件)を超えています({column.length}件)。ブロックはしません
+          ⚠ WIP上限({active.wipLimit}件)を超えています(実タスク{actualCount}件)。ブロックはしません
         </p>
       )}
       {error && (
@@ -193,11 +204,30 @@ export function BoardScreen() {
               />
             )
           }
-          const issue = row.issue
+          const group = row.group
+          const issue = group.issue
+          if (group.recurring) {
+            return <li key={group.key}>
+              <RecurringBoardCard
+                group={group}
+                rule={recurrenceRules.find(/* グループの頻度と間隔を取得する。 */ (rule) => rule.id === issue.recurrenceId)}
+                statuses={statuses}
+                doneIds={doneIds}
+                pulse={group.occurrences.some(/* グループ内で状態を変えた回を強調表示する。 */ (occurrence) => occurrence.id === pulseId)}
+                onOpen={setEditing}
+                onToggleDone={toggleDone}
+                onChangeStatus={/* 展開一覧から選択した回だけを、移動先列の末尾へ保存する。 */ async (id, statusId) => {
+                  const statusIndex = statuses.findIndex(/* ステータスIDを列番号へ変換する。 */ (status) => status.id === statusId)
+                  const latest = useDataStore.getState().issues
+                  await move(id, statusIndex, columnIssues(latest, statusId, sprint.id).length)
+                }}
+              />
+            </li>
+          }
           const isDragged = drag?.issueId === issue.id
           const swipeHere = swipe?.issueId === issue.id ? swipe : null
           return (
-            <li key={issue.id}>
+            <li key={group.key}>
               <BoardCard
                 issue={issue}
                 done={doneIds.has(issue.statusId)}
