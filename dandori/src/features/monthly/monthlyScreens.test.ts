@@ -44,6 +44,22 @@ it('creates tasks for a month instead of a sprint', /* 新規タスク作成画�
   expect(html).not.toContain('スプリント')
 })
 
+/** 新しい列がボードに表示され、作成画面で定期タスクを選択・説明できることを確認する。 */
+it('offers the routine status in board tabs and the issue editor', () => {
+  const workflow = useDataStore.getState().workflows.workflow
+  useDataStore.setState({ workflows: { workflow: { ...workflow, statuses: [workflow.statuses[0], { id: 'doing', name: 'In Progress', category: 'doing' }, { id: 'routine', name: 'Recurring', category: 'routine' }, workflow.statuses[1]] } } })
+  const board = renderToStaticMarkup(createElement(BoardScreen))
+  expect(board.indexOf('To Do')).toBeLessThan(board.indexOf('In Progress'))
+  expect(board.indexOf('In Progress')).toBeLessThan(board.indexOf('Recurring'))
+  expect(board.indexOf('Recurring')).toBeLessThan(board.indexOf('Done'))
+  const editor = renderToStaticMarkup(createElement(IssueEditor, { issue: null, defaultStatusId: 'routine', onClose: () => {} }))
+  expect(editor).toContain('value="routine" selected=""')
+  expect(editor.indexOf('value="todo"')).toBeLessThan(editor.indexOf('value="doing"'))
+  expect(editor.indexOf('value="doing"')).toBeLessThan(editor.indexOf('value="routine"'))
+  expect(editor.indexOf('value="routine"')).toBeLessThan(editor.indexOf('value="done"'))
+  expect(editor).toContain('会議など決まった時間の予定に使います')
+})
+
 /** 両画面で同じ繰り返しを表示するための、月付きタスクを用意する。 */
 function recurringTask(id: string, patch: Partial<Issue> = {}): Issue {
   return {

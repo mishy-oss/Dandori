@@ -7,11 +7,12 @@ export const PROJECT_KEY_PATTERN = /^[A-Z][A-Z0-9]{1,9}$/
 // UI にプロジェクトの概念は出さず、内部では常に1つの既定プロジェクトに全Issueを紐づける
 export const DEFAULT_PROJECT = { key: 'TASK', name: 'Dandori' } as const
 
-/** 初期ワークフロー用にTo Do・In Progress・Doneのステータスを新しいIDで作る。 */
+/** 初期ワークフロー用に通常の3列と定期タスクの列を新しいIDで作る。 */
 export function createDefaultStatuses(): WorkflowStatus[] {
   return [
     { id: newId(), name: 'To Do', category: 'todo' },
     { id: newId(), name: 'In Progress', category: 'doing', wipLimit: 3 },
+    { id: newId(), name: 'Recurring', category: 'routine' },
     { id: newId(), name: 'Done', category: 'done' },
   ]
 }

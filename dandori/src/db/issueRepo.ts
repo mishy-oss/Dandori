@@ -59,10 +59,11 @@ export async function syncParentStatuses(ids: (string | null)[], timestamp: numb
       if (children.length) {
         const categories = children.map((child) => workflow.statuses.find((s) => s.id === child.statusId)?.category)
         const category = categories.every((value) => value === 'done') ? 'done'
-          : categories.some((value) => value === 'doing' || value === 'done') ? 'doing' : 'todo'
-        const target = workflow.statuses.find((status) => status.category === category)
+          : categories.some((value) => value === 'doing' || value === 'done' || value === 'routine') ? 'doing' : 'todo'
+        const targetCategory = parent.isRoutine && category !== 'done' ? 'routine' : category
+        const target = workflow.statuses.find((status) => status.category === targetCategory)
         const currentCategory = workflow.statuses.find((status) => status.id === parent.statusId)?.category
-        if (target && currentCategory !== category) {
+        if (target && currentCategory !== targetCategory) {
           await db.issues.update(parent.id, {
             statusId: target.id, completedAt: category === 'done' ? timestamp : null,
             rank: await nextRankInStatus(parent.projectId, target.id), updatedAt: timestamp,
@@ -212,6 +213,7 @@ export async function createIssue(input: CreateIssueInput): Promise<Issue> {
       title,
       description: input.description,
       statusId,
+      isRoutine: status.category === 'routine',
       priority: input.priority ?? 'medium',
       parentId: input.parentId ?? null,
       labels: input.labels ?? [],
@@ -319,12 +321,18 @@ export async function updateIssue(
       if (status?.category === 'todo') {
         if (newlyScheduled) next.statusId = workflow?.statuses.find((s) => s.category === 'doing')?.id ?? next.statusId
       }
-      if (clearedSchedule && status && status.category !== 'done') {
+      if (clearedSchedule && status && status.category !== 'done' && status.category !== 'routine') {
         next.statusId = workflow?.statuses.find((s) => s.category === 'todo')?.id ?? next.statusId
       }
     }
 
     let transitionedToDone = false
+    if (issuePatch.statusId !== undefined) {
+      const project = await getProject(current.projectId)
+      const workflow = project && await getWorkflow(project.workflowId)
+      const chosenStatus = workflow?.statuses.find((status) => status.id === issuePatch.statusId)
+      if (chosenStatus && chosenStatus.category !== 'done') next.isRoutine = chosenStatus.category === 'routine'
+    }
     if (next.statusId !== current.statusId) {
       const project = await getProject(current.projectId)
       const workflow = project && (await getWorkflow(project.workflowId))
@@ -382,7 +390,7 @@ async function createNextOccurrence(completed: Issue, timestamp: number): Promis
 
   const project = await getProject(completed.projectId)
   const workflow = project && await getWorkflow(project.workflowId)
-  const todoStatus = workflow?.statuses.find(/* 未着手カテゴリという条件を最初に満たす要素を探す。 */ (status) => status.category === 'todo')
+  const todoStatus = workflow?.statuses.find(/* 定期タスクの次回分は専用列へ、それ以外は未着手へ戻す。 */ (status) => status.category === (completed.isRoutine ? 'routine' : 'todo'))
   if (!project || !todoStatus) return
 
   const nextIssue: Issue = {
@@ -465,6 +473,7 @@ export async function moveIssue(
     const moved: Issue = {
       ...current,
       statusId,
+      isRoutine: status.category === 'done' ? current.isRoutine : status.category === 'routine',
       rank: rankBetween(prev, next),
       completedAt:
         status.category === 'done' ? (keepCompletedAt ? current.completedAt : t) : null,

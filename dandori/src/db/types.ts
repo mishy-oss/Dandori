@@ -2,7 +2,7 @@ import type { ID } from '../lib/id'
 
 export type { ID }
 
-export type StatusCategory = 'todo' | 'doing' | 'done'
+export type StatusCategory = 'todo' | 'doing' | 'done' | 'routine'
 
 export interface WorkflowStatus {
   id: ID
@@ -42,6 +42,8 @@ export interface Issue {
   title: string
   description?: string
   statusId: ID
+  /** 完了後の再開と繰り返し生成で、定期タスクとしての扱いを引き継ぐ。 */
+  isRoutine?: boolean
   priority: Priority
   parentId: ID | null
   labels: string[]
