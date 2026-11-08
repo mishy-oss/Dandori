@@ -23,7 +23,7 @@ export async function expandRecurrenceInMonth(source: Issue, month: string, time
   while (cursor < startDate) cursor = nextDate(rule, cursor)
   const project = await getProject(source.projectId)
   const workflow = project && await getWorkflow(project.workflowId)
-  const todo = workflow?.statuses.find(/* 新しい回は未着手ステータスに置く。 */ (status) => status.category === 'todo')
+  const todo = workflow?.statuses.find(/* 定期タスクは専用列へ、通常の繰り返しは未着手列へ置く。 */ (status) => status.category === (source.isRoutine ? 'routine' : 'todo'))
   if (!project || !todo) return
   const existing = await db.issues.where('recurrenceId').equals(rule.id).toArray()
   const dates = new Set(existing.map(/* 削除した回も記録として残し、同じ日を勝手に再生成しない。 */ (issue) => issue.date))
@@ -66,7 +66,7 @@ export async function expandRecurrenceInSprint(
 
   const project = await getProject(source.projectId)
   const workflow = project && await getWorkflow(project.workflowId)
-  const todoStatus = workflow?.statuses.find(/* 未着手カテゴリという条件を最初に満たす要素を探す。 */ (status) => status.category === 'todo')
+  const todoStatus = workflow?.statuses.find(/* 旧スプリントでも定期タスクの列を引き継ぐ。 */ (status) => status.category === (source.isRoutine ? 'routine' : 'todo'))
   if (!project || !todoStatus) return
 
   let nextNumber = project.nextNumber

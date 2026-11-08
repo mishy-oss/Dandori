@@ -29,7 +29,7 @@ describe('project / workflow', /* 「project / workflow」に関するテスト�
     expect(p.name).toBe('App')
     expect(p.nextNumber).toBe(1)
     const w = await getWorkflow(p.workflowId)
-    expect(w?.statuses.map(/* 各要素からステータスのカテゴリだけを取り出す。 */ (s) => s.category)).toEqual(['todo', 'doing', 'done'])
+    expect(w?.statuses.map(/* 各要素からステータスのカテゴリだけを取り出す。 */ (s) => s.category)).toEqual(['todo', 'doing', 'routine', 'done'])
     expect(w?.statuses[1].wipLimit).toBe(3)
   })
 
@@ -77,7 +77,7 @@ describe('project / workflow', /* 「project / workflow」に関するテスト�
   it('validates workflow edits', /* 必須カテゴリや使用中の列を削除できず、ステータス名は変更できることを検証する。 */ async () => {
     const p = await createProject({ key: 'APP', name: 'App' })
     const w = (await getWorkflow(p.workflowId))!
-    const [todo, doing, done] = w.statuses
+    const [todo, doing, , done] = w.statuses
 
     const issue = await createIssue({ projectId: p.id, title: 'a', statusId: doing.id })
 
@@ -130,7 +130,7 @@ describe('issue', /* 「issue」に関するテストをまとめて定義する
     const i = await createIssue({ projectId: p.id, title: 't' })
     await updateIssue(i.id, { date: '2026-10-07', startMin: 600 })
 
-    const done = await updateIssue(i.id, { statusId: w.statuses[2].id })
+    const done = await updateIssue(i.id, { statusId: w.statuses.find((status) => status.category === 'done')!.id })
     expect(done.completedAt).not.toBeNull()
     expect(done).toMatchObject({ date: '2026-10-07', startMin: 600 })
 
@@ -170,7 +170,7 @@ describe('moveIssue', /* 「moveIssue」に関するテストをまとめて定�
   /** 並べ替えテスト用にプロジェクト・初期ステータス・3件のIssueを用意する。 */
   async function setup() {
     const p = await createProject({ key: 'APP', name: 'App' })
-    const [todo, doing, done] = (await getWorkflow(p.workflowId))!.statuses
+    const [todo, doing, , done] = (await getWorkflow(p.workflowId))!.statuses
     const a = await createIssue({ projectId: p.id, title: 'a' })
     const b = await createIssue({ projectId: p.id, title: 'b' })
     const c = await createIssue({ projectId: p.id, title: 'c' })

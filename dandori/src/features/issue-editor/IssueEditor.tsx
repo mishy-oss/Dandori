@@ -91,6 +91,7 @@ export function IssueEditor({
   }, [issues, issueId])
   const parentOptions = issues.filter(/* 自分と子孫を親候補から除外・操作対象のIDを除外という条件を満たす要素だけを残す。 */ (i) => i.id !== issueId && !descendants.has(i.id))
   const children = issueId ? issues.filter(/* 指定の親Issueと一致という条件を満たす要素だけを残す。 */ (i) => i.parentId === issueId) : []
+  const isRoutine = workflow?.statuses.find((status) => status.id === statusId)?.category === 'routine'
 
   /** 編集中のIssueを同じステータス・対象月の中で1つ上または下へ移動する。 */
   async function reorder(delta: -1 | 1) {
@@ -427,6 +428,7 @@ export function IssueEditor({
           </button>
         </fieldset>
 
+        {isRoutine && <p className="text-xs text-muted">Recurring：会議など決まった時間の予定に使います。日付・開始時刻と、必要に応じて繰り返しを設定してください。</p>}
         {issue && (
           <fieldset className="flex flex-col gap-2 rounded-lg border border-border p-3">
             <legend className="px-1 text-sm font-semibold text-muted">

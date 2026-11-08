@@ -150,7 +150,7 @@ export const useDataStore = create<DataState>(/* データ一覧と保存操作�
       if (!issue || !workflow) return
       const isDone =
         workflow.statuses.find(/* 指定IDと一致という条件を最初に満たす要素を探す。 */ (s) => s.id === issue.statusId)?.category === 'done'
-      const target = workflow.statuses.find(/* 現在が完了なら未着手、未完了なら完了カテゴリのステータスを探す。 */ (s) => s.category === (isDone ? 'todo' : 'done'))
+      const target = workflow.statuses.find(/* 定期タスクの完了解除は専用列へ戻し、それ以外は未着手へ戻す。 */ (s) => s.category === (isDone ? (issue.isRoutine ? 'routine' : 'todo') : 'done'))
       if (!target) return
       await issueRepo.updateIssue(id, { statusId: target.id })
       await reload()
