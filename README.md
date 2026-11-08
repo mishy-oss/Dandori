@@ -31,6 +31,20 @@ npm run generate-icons # public/icon.svg から PWA アイコンを再生成
 
 Service Worker は開発サーバーでは無効です。オフライン動作は `build` → `preview` で確認します。
 
+## Cloudflare Workers Builds の設定
+
+GitHub 連携の自動ビルドでは、Cloudflare の Worker → Settings → Build で次を設定してください。
+
+| 設定 | 値 |
+| --- | --- |
+| Root directory | `dandori` |
+| Build command | `npm run build` |
+| Deploy command | `npx wrangler deploy` |
+
+依存関係と `package-lock.json` は `dandori/` にあります。リポジトリ直下の `package.json` はローカル操作用のコマンド転送のみです。Root directory がリポジトリ直下のままだと、ビルド環境に TypeScript がインストールされず、`tsc: not found` で失敗します。
+
+Root directory を変更したら、Cloudflare で失敗したビルドを再実行してください。VAPID キーはビルド変数ではなく、デプロイ先 Worker の Secret に設定します。
+
 ## 開発フェーズ
 
 | フェーズ | 内容 | 状態 |

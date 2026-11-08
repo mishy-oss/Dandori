@@ -6,9 +6,10 @@ import { DEFAULT_SPRINT_DAYS } from '../../db/sprintRepo'
 import { addDaysStr, todayStr } from '../../lib/date'
 import { useDataStore } from '../../store/data'
 
+/** スプリントの名前・ゴール・期間を入力し、新規作成または編集するフォームを表示する。 */
 export function SprintFormSheet({ sprint, onClose }: { sprint: Sprint | null; onClose: () => void }) {
-  const createSprint = useDataStore((s) => s.createSprint)
-  const updateSprint = useDataStore((s) => s.updateSprint)
+  const createSprint = useDataStore(/* ストアからcreateSprint（保存・状態変更の操作）を取得する。 */ (s) => s.createSprint)
+  const updateSprint = useDataStore(/* ストアからupdateSprint（保存・状態変更の操作）を取得する。 */ (s) => s.updateSprint)
 
   const [name, setName] = useState(sprint?.name ?? '')
   const [goal, setGoal] = useState(sprint?.goal ?? '')
@@ -19,11 +20,13 @@ export function SprintFormSheet({ sprint, onClose }: { sprint: Sprint | null; on
   const [endTouched, setEndTouched] = useState(sprint !== null)
   const [error, setError] = useState<string | null>(null)
 
+  /** 開始日の入力を更新し、終了日がまだ手動変更されていなければ既定の14日間になるよう終了日も合わせる。 */
   function onStartChange(value: string) {
     setStartDate(value)
     if (!endTouched && value) setEndDate(addDaysStr(value, DEFAULT_SPRINT_DAYS - 1))
   }
 
+  /** 標準のフォーム送信を止め、入力値からスプリントを新規作成または更新する。成功時はフォームを閉じる。 */
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
     try {
@@ -44,14 +47,14 @@ export function SprintFormSheet({ sprint, onClose }: { sprint: Sprint | null; on
         <h2 className="text-lg font-bold">{sprint ? 'スプリントを編集' : '新規スプリント'}</h2>
         <label className="flex flex-col gap-1 text-sm text-muted">
           名前{!sprint && '(空欄なら自動で番号を付けます)'}
-          <input className={FIELD_CLASS} value={name} onChange={(e) => setName(e.target.value)} />
+          <input className={FIELD_CLASS} value={name} onChange={/* 入力された値に合わせて名前を更新する。 */ (e) => setName(e.target.value)} />
         </label>
         <label className="flex flex-col gap-1 text-sm text-muted">
           ゴール
           <textarea
             className={`${FIELD_CLASS} min-h-20 py-2`}
             value={goal}
-            onChange={(e) => setGoal(e.target.value)}
+            onChange={/* 入力された値に合わせてスプリントのゴールを更新する。 */ (e) => setGoal(e.target.value)}
           />
         </label>
         <div className="grid grid-cols-2 gap-3">
@@ -61,7 +64,7 @@ export function SprintFormSheet({ sprint, onClose }: { sprint: Sprint | null; on
               type="date"
               className={FIELD_CLASS}
               value={startDate}
-              onChange={(e) => onStartChange(e.target.value)}
+              onChange={/* 入力された開始日を受け取り、必要に応じて終了日も連動更新する。 */ (e) => onStartChange(e.target.value)}
             />
           </label>
           <label className="flex flex-col gap-1 text-sm text-muted">
@@ -70,7 +73,7 @@ export function SprintFormSheet({ sprint, onClose }: { sprint: Sprint | null; on
               type="date"
               className={FIELD_CLASS}
               value={endDate}
-              onChange={(e) => {
+              onChange={/* 入力された値に合わせて終了日を手動変更した状態と終了日を更新する。 */ (e) => {
                 setEndTouched(true)
                 setEndDate(e.target.value)
               }}

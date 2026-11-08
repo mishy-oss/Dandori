@@ -2,14 +2,16 @@ import { useState } from 'react'
 import { FIELD_CLASS } from '../../app/fields'
 import { useDataStore } from '../../store/data'
 
-const START_HOURS = Array.from({ length: 24 }, (_, i) => i)
-const END_HOURS = Array.from({ length: 24 }, (_, i) => i + 1)
+const START_HOURS = Array.from({ length: 24 }, /* 添字から時間目盛りまたは選択肢となる連続した値を作る。 */ (_, i) => i)
+const END_HOURS = Array.from({ length: 24 }, /* 0からの添字を1〜24時の終了時刻候補に変換する。 */ (_, i) => i + 1)
 
+/** 表示する開始・終了時刻、既定の所要時間、週の開始曜日を編集する設定欄を表示する。 */
 export function TimelineSettingsSection() {
-  const settings = useDataStore((s) => s.settings)
-  const updateSettings = useDataStore((s) => s.updateSettings)
+  const settings = useDataStore(/* ストアから画面設定を取得する。 */ (s) => s.settings)
+  const updateSettings = useDataStore(/* ストアからupdateSettings（保存・状態変更の操作）を取得する。 */ (s) => s.updateSettings)
   const [error, setError] = useState<string | null>(null)
 
+  /** 変更された設定項目を保存し、検証や保存に失敗した場合はエラーを表示する。 */
   async function save(patch: Parameters<typeof updateSettings>[0]) {
     try {
       setError(null)
@@ -28,9 +30,9 @@ export function TimelineSettingsSection() {
           <select
             className={FIELD_CLASS}
             value={settings.dayStartHour}
-            onChange={(e) => void save({ dayStartHour: Number(e.target.value) })}
+            onChange={/* 入力された設定値を数値へ変換し、タイムライン設定の保存処理へ渡す。 */ (e) => void save({ dayStartHour: Number(e.target.value) })}
           >
-            {START_HOURS.map((h) => (
+            {START_HOURS.map(/* 各開始時刻の候補の表示要素を作り、対応する選択・編集操作を結び付ける。 */ (h) => (
               <option key={h} value={h}>
                 {String(h).padStart(2, '0')}:00
               </option>
@@ -42,9 +44,9 @@ export function TimelineSettingsSection() {
           <select
             className={FIELD_CLASS}
             value={settings.dayEndHour}
-            onChange={(e) => void save({ dayEndHour: Number(e.target.value) })}
+            onChange={/* 入力された設定値を数値へ変換し、タイムライン設定の保存処理へ渡す。 */ (e) => void save({ dayEndHour: Number(e.target.value) })}
           >
-            {END_HOURS.map((h) => (
+            {END_HOURS.map(/* 各終了時刻の候補の表示要素を作り、対応する選択・編集操作を結び付ける。 */ (h) => (
               <option key={h} value={h}>
                 {String(h).padStart(2, '0')}:00
               </option>
@@ -61,7 +63,7 @@ export function TimelineSettingsSection() {
             className={FIELD_CLASS}
             defaultValue={settings.defaultDuration}
             key={settings.defaultDuration}
-            onBlur={(e) => void save({ defaultDuration: Number(e.target.value) })}
+            onBlur={/* 入力された設定値を数値へ変換し、タイムライン設定の保存処理へ渡す。 */ (e) => void save({ defaultDuration: Number(e.target.value) })}
           />
         </label>
         <label className="flex flex-col gap-1 text-sm text-muted">
@@ -69,7 +71,7 @@ export function TimelineSettingsSection() {
           <select
             className={FIELD_CLASS}
             value={settings.weekStartsOn}
-            onChange={(e) => void save({ weekStartsOn: Number(e.target.value) as 0 | 1 })}
+            onChange={/* 入力された設定値を数値へ変換し、タイムライン設定の保存処理へ渡す。 */ (e) => void save({ weekStartsOn: Number(e.target.value) as 0 | 1 })}
           >
             <option value={1}>月曜</option>
             <option value={0}>日曜</option>

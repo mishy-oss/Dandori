@@ -14,11 +14,11 @@ export function DoneCheckButton({
       data-no-drag
       aria-label={done ? '未完了に戻す' : '完了にする'}
       aria-pressed={done}
-      onClick={(e) => {
+      onClick={/* クリックの伝播を止め、Issueの完了状態だけを切り替える。 */ (e) => {
         e.stopPropagation()
         onToggle()
       }}
-      onKeyDown={(e) => e.stopPropagation()}
+      onKeyDown={/* キー操作が親の編集・ドラッグ処理へ伝わらないようにする。 */ (e) => e.stopPropagation()}
       className={`flex size-11 shrink-0 items-center justify-center rounded-full ${className}`}
     >
       <span

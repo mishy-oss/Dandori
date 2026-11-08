@@ -10,6 +10,7 @@ const PRIORITY_COLOR: Record<Priority, string> = {
   low: '#94a3b8',
 }
 
+/** Issueの番号・優先度・親子関係・完了状態を行として表示し、タップで編集、スワイプや長押しで移動操作を受け付ける。 */
 export function BacklogRow({
   issue,
   done,
@@ -47,11 +48,11 @@ export function BacklogRow({
         role="button"
         tabIndex={0}
         onPointerDown={onPointerDown}
-        onContextMenu={(e) => e.preventDefault()}
-        onClick={() => {
+        onContextMenu={/* 長押しや右クリックによる標準メニューを抑止し、ジェスチャー操作を続けられるようにする。 */ (e) => e.preventDefault()}
+        onClick={/* 直前にジェスチャー操作をしていない場合だけ、対象Issueの編集画面を開く。 */ () => {
           if (!shouldSuppressClick()) onOpen()
         }}
-        onKeyDown={(e) => {
+        onKeyDown={/* Enterまたはスペースで対象Issueを開き、キーボードからも編集できるようにする。 */ (e) => {
           if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
             e.preventDefault()
             onOpen()

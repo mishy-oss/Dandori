@@ -9,6 +9,7 @@ export interface IssueFilter {
 
 export const EMPTY_FILTER: IssueFilter = { query: '', priority: 'all', type: 'all' }
 
+/** 検索語・優先度・種別のいずれかに絞り込み条件が指定されているかを返す。 */
 export function isFilterActive(f: IssueFilter): boolean {
   return f.query.trim() !== '' || f.priority !== 'all' || f.type !== 'all'
 }

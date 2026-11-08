@@ -23,6 +23,7 @@ interface Props {
   onToggleDone: () => void
 }
 
+/** Issueをボードのカードとして表示する。スワイプ位置、ドラッグ時の浮いた表示、完了状態を反映する。 */
 export function BoardCard({
   issue,
   done,
@@ -41,7 +42,7 @@ export function BoardCard({
       tabIndex={0}
       data-card-id={issue.id}
       onClick={onOpen}
-      onKeyDown={(e) => {
+      onKeyDown={/* Enterまたはスペースで対象Issueを開き、キーボードからも編集できるようにする。 */ (e) => {
         if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
           e.preventDefault()
           onOpen()
