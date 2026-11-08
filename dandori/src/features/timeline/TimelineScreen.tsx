@@ -124,20 +124,19 @@ export function TimelineScreen() {
 
   if (!ready || !project) return null
 
-  const title = format(parseISO(selected), 'M月d日(E)', { locale: ja })
+  const title = format(parseISO(selected), 'M月d日', { locale: ja })
   const nowLine = selected === today ? nowMin(now) : null
 
   return (
-    <div ref={rootRef} onPointerDown={onPointerDown} className="flex h-full flex-col gap-2 px-4 pt-4">
-      <div className="flex items-center gap-2">
-        <h1 className="flex-1 text-2xl font-bold">
-          {selected === today ? 'Today' : title}
-          {selected === today && <span className="ml-2 text-sm font-normal text-muted">{title}</span>}
+    <div ref={rootRef} onPointerDown={onPointerDown} className="flex h-full min-h-0 flex-col pt-6">
+      <div className="flex shrink-0 items-center gap-2 px-6 pb-2">
+        <h1 className="flex-1 text-[25px] font-semibold tracking-[-0.04em]">
+          {title}<span className="ml-2 font-medium text-accent">{format(parseISO(selected), 'yyyy')}</span>
         </h1>
         {selected !== today && (
           <button
             onClick={/* 操作内容に合わせて選択日を更新する。 */ () => setSelected(todayStr())}
-            className="min-h-11 rounded-lg border border-border bg-surface px-4 text-sm"
+            className="min-h-11 rounded-full px-3 text-xs font-medium text-accent"
           >
             今日
           </button>
@@ -155,6 +154,7 @@ export function TimelineScreen() {
 
       <SprintOverdueBanner />
 
+      <div className="timeline-sheet flex min-h-0 flex-1 flex-col">
       <UnplacedTray
         issues={unplaced}
         drag={drag}
@@ -169,7 +169,7 @@ export function TimelineScreen() {
         </p>
       )}
 
-      <div ref={scrollerRef} className="-mx-4 flex-1 overflow-y-auto pb-24 pt-3">
+      <div ref={scrollerRef} className="timeline-scroller min-h-0 flex-1 overflow-y-auto pb-28 pt-3">
         <TimelineGrid
           gridRef={gridRef}
           range={range}
@@ -184,12 +184,12 @@ export function TimelineScreen() {
           shouldSuppressClick={shouldSuppressClick}
         />
       </div>
+      </div>
 
       <button
         aria-label="Issueを作成"
         onClick={/* 新規Issueの作成画面を開く。 */ () => setEditor({ create: { startMin: null } })}
-        className="fixed right-4 z-30 flex size-14 items-center justify-center rounded-full bg-accent text-3xl text-accent-text shadow-lg"
-        style={{ bottom: 'calc(env(safe-area-inset-bottom) + 72px)' }}
+        className="app-fab"
       >
         +
       </button>

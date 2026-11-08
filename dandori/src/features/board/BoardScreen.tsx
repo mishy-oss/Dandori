@@ -250,8 +250,7 @@ export function BoardScreen() {
       <button
         aria-label="Issueを作成"
         onClick={/* 新規Issueの作成画面を開く。 */ () => setEditing('new')}
-        className="fixed right-4 z-30 flex size-14 items-center justify-center rounded-full bg-accent text-3xl text-accent-text shadow-lg"
-        style={{ bottom: 'calc(env(safe-area-inset-bottom) + 72px)' }}
+        className="app-fab"
       >
         +
       </button>

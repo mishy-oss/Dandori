@@ -2,7 +2,8 @@ import { addDays, format, parseISO, startOfWeek } from 'date-fns'
 import { DATE_FORMAT } from '../../lib/date'
 import { MINUTES_PER_DAY } from '../../lib/schedule'
 
-export const PX_PER_MIN = 1.2
+// 15分の予定にもアイコンと2行の文字が収まるようにする。
+export const PX_PER_MIN = 2.8
 export const SNAP_MIN = 15
 export const MIN_BLOCK_DURATION_MIN = 15
 

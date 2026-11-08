@@ -3,7 +3,7 @@ import { create } from 'zustand'
 export type ThemeSetting = 'system' | 'light' | 'dark'
 
 const STORAGE_KEY = 'dandori:theme'
-const THEME_COLORS = { light: '#f8fafc', dark: '#0f172a' } as const
+const THEME_COLORS = { light: '#f4f3f6', dark: '#0f172a' } as const
 
 /** 保存されたテーマ設定を取得し、不正な値やストレージ利用不可の場合はsystemを返す。 */
 function readStored(): ThemeSetting {

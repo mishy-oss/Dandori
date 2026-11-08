@@ -18,11 +18,11 @@ export function WeekStrip({
   onShiftWeek: (delta: -1 | 1) => void
 }) {
   return (
-    <div className="flex items-center gap-1" role="group" aria-label="週">
+    <div className="flex items-center gap-1 px-3 pb-4" role="group" aria-label="週">
       <button
         aria-label="前の週"
         onClick={/* 表示する週を1週前へ移動する。 */ () => onShiftWeek(-1)}
-        className="min-h-11 min-w-9 rounded-lg text-lg text-muted"
+        className="min-h-14 w-6 shrink-0 rounded-full text-xl text-muted hover:bg-surface"
       >
         ‹
       </button>
@@ -36,16 +36,14 @@ export function WeekStrip({
               aria-label={format(date, 'M月d日(E)', { locale: ja })}
               aria-pressed={isSelected}
               onClick={/* クリックした日付を選択するよう、呼び出し元へ通知する。 */ () => onSelect(d)}
-              className={`relative flex min-h-14 flex-col items-center justify-center rounded-xl text-xs ${
-                isSelected ? 'bg-accent text-accent-text' : 'bg-surface'
-              } ${d === today && !isSelected ? 'ring-1 ring-accent' : ''}`}
+              className="relative flex min-h-[68px] flex-col items-center justify-center gap-1 rounded-full text-xs"
             >
-              <span className={isSelected ? '' : 'text-muted'}>{format(date, 'E', { locale: ja })}</span>
-              <span className="text-base font-semibold">{format(date, 'd')}</span>
+              <span className="text-[10px] font-normal text-muted">{format(date, 'E', { locale: ja })}</span>
+              <span className={`flex size-8 items-center justify-center rounded-full text-[14px] font-semibold ${isSelected ? 'bg-accent text-accent-text' : d === today ? 'text-accent ring-1 ring-accent/40' : 'text-text'}`}>{format(date, 'd')}</span>
               {marked.has(d) && (
                 <span
                   aria-hidden
-                  className={`absolute bottom-1 size-1 rounded-full ${isSelected ? 'bg-accent-text' : 'bg-accent'}`}
+                  className="absolute bottom-0.5 h-1 w-3 rounded-full bg-accent/65"
                 />
               )}
             </button>
@@ -55,7 +53,7 @@ export function WeekStrip({
       <button
         aria-label="次の週"
         onClick={/* 表示する週を1週後へ移動する。 */ () => onShiftWeek(1)}
-        className="min-h-11 min-w-9 rounded-lg text-lg text-muted"
+        className="min-h-14 w-6 shrink-0 rounded-full text-xl text-muted hover:bg-surface"
       >
         ›
       </button>

@@ -6,13 +6,14 @@ import { useDataStore } from '../store/data'
 import { TimelineScreen } from '../features/timeline/TimelineScreen'
 import { PwaToast } from './PwaToast'
 import { useThemeEffect } from './useThemeEffect'
+import { Icon } from './Icon'
 import { readPushDeviceToken, syncPushSchedules, PUSH_SETTINGS_CHANGED_EVENT } from '../features/notifications/pushClient'
 
 const TABS = [
-  { id: 'today', label: 'Today', icon: '🗓', Screen: TimelineScreen },
-  { id: 'board', label: 'Board', icon: '🗂', Screen: BoardScreen },
-  { id: 'backlog', label: 'Backlog', icon: '📋', Screen: BacklogScreen },
-  { id: 'settings', label: '設定', icon: '⚙️', Screen: SettingsScreen },
+  { id: 'today', label: '予定', icon: 'timeline', Screen: TimelineScreen },
+  { id: 'board', label: 'ボード', icon: 'board', Screen: BoardScreen },
+  { id: 'backlog', label: 'タスク', icon: 'inbox', Screen: BacklogScreen },
+  { id: 'settings', label: '設定', icon: 'settings', Screen: SettingsScreen },
 ] as const
 
 type TabId = (typeof TABS)[number]['id']
@@ -69,30 +70,27 @@ export function App() {
 
   return (
     <div
-      className="mx-auto flex h-full max-w-xl flex-col"
+      className="relative mx-auto flex h-full max-w-xl flex-col"
       style={{ paddingTop: 'env(safe-area-inset-top)' }}
     >
-      <main className="flex-1 overflow-y-auto">
+      <main className={`min-h-0 flex-1 overflow-y-auto ${tab === 'today' ? '' : 'pb-24'}`}>
         <Active />
       </main>
 
       <nav
         aria-label="メイン"
-        className="grid grid-cols-4 border-t border-border bg-surface"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+        className="app-nav grid grid-cols-4 px-1"
       >
         {TABS.map(/* 各ナビゲーションのタブの表示要素を作り、対応する選択・編集操作を結び付ける。 */ (t) => (
           <button
             key={t.id}
             aria-current={tab === t.id ? 'page' : undefined}
             onClick={/* 操作内容に合わせて表示するタブを更新する。 */ () => setTab(t.id)}
-            className={`flex min-h-14 flex-col items-center justify-center gap-0.5 text-xs ${
-              tab === t.id ? 'font-semibold text-accent' : 'text-muted'
+            className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-full text-[10px] ${
+              tab === t.id ? 'font-semibold text-accent' : 'text-text'
             }`}
           >
-            <span aria-hidden className="text-lg leading-none">
-              {t.icon}
-            </span>
+            <Icon name={t.icon} className="size-5" />
             {t.label}
           </button>
         ))}
