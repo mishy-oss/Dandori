@@ -2,6 +2,7 @@ import { useMemo, useState, type FormEvent } from 'react'
 import { ISSUE_TYPES, PRIORITIES, type Issue, type IssueType, type Priority, type RecurrenceFrequency } from '../../db/types'
 import { formatIssueNumber } from '../../lib/issueNumber'
 import { todayStr } from '../../lib/date'
+import { currentMonth, isValidMonth, issueMonth } from '../../lib/month'
 import { selectCurrentProject, useDataStore } from '../../store/data'
 import { formatMin, parseTime } from '../timeline/timelineLogic'
 
@@ -13,38 +14,35 @@ const WEEKDAY_LABELS = ['日', '月', '火', '水', '木', '金', '土']
 export function IssueEditor({
   issue,
   defaultStatusId,
-  defaultSprintId = null,
+  defaultPlanningMonth = currentMonth(),
   initialSchedule,
   onClose,
 }: {
   issue: Issue | null
   defaultStatusId?: string
-  defaultSprintId?: string | null
+  defaultPlanningMonth?: string
   initialSchedule?: { date: string | null; startMin: number | null }
   onClose: () => void
 }) {
   const project = useDataStore(selectCurrentProject)
   const workflow = useDataStore(/* 現在のプロジェクトに対応するワークフローをストアから取得する。 */ (s) => (project ? s.workflows[project.workflowId] : undefined))
-  const sprints = useDataStore(/* ストアからスプリントを取得する。 */ (s) => s.sprints)
   const defaultDuration = useDataStore(/* ストアから既定の所要時間を取得する。 */ (s) => s.settings.defaultDuration)
   const createIssue = useDataStore(/* ストアからcreateIssue（保存・状態変更の操作）を取得する。 */ (s) => s.createIssue)
   const updateIssue = useDataStore(/* ストアからupdateIssue（保存・状態変更の操作）を取得する。 */ (s) => s.updateIssue)
   const deleteIssue = useDataStore(/* ストアからdeleteIssue（保存・状態変更の操作）を取得する。 */ (s) => s.deleteIssue)
   const moveIssue = useDataStore(/* ストアからmoveIssue（保存・状態変更の操作）を取得する。 */ (s) => s.moveIssue)
-  const assignIssueToSprint = useDataStore(/* ストアからassignIssueToSprint（保存・状態変更の操作）を取得する。 */ (s) => s.assignIssueToSprint)
   const stopRecurrence = useDataStore(/* ストアからstopRecurrence（保存・状態変更の操作）を取得する。 */ (s) => s.stopRecurrence)
   const recurrenceRule = useDataStore(/* Issueの繰り返しIDに一致するルールをストアから取り出す。 */ (s) => s.recurrenceRules.find(/* 指定IDと一致という条件を最初に満たす要素を探す。 */ (rule) => rule.id === issue?.recurrenceId))
   const issues = useDataStore(/* ストアからIssueを取得する。 */ (s) => s.issues)
-  // 並び順は「同じステータス・同じスプリント(またはバックログ)」の中で扱う
+  // 並び順は同じステータス・同じ対象月の中で扱う。
   const column = useMemo(
     () =>
       issue
-        ? issues.filter(/* 指定ステータスと一致・指定スプリントまたはバックログと一致という条件を満たす要素だけを残す。 */ (i) => i.statusId === issue.statusId && i.sprintId === issue.sprintId)
+        ? issues.filter(/* 同じ月とステータスのタスクを取り出す。 */ (i) => i.statusId === issue.statusId && issueMonth(i) === issueMonth(issue))
         : [],
     [issues, issue],
   )
   const position = issue ? column.findIndex(/* 指定IDと一致という条件を最初に満たす要素の位置を探す。 */ (i) => i.id === issue.id) : -1
-  const sprintOptions = sprints.filter(/* 完了していないスプリントと、編集中Issueが現在属するスプリントを選択肢に残す。 */ (s) => s.state !== 'closed' || s.id === issue?.sprintId)
 
   const [title, setTitle] = useState(issue?.title ?? '')
   const [description, setDescription] = useState(issue?.description ?? '')
@@ -53,7 +51,7 @@ export function IssueEditor({
   const [statusId, setStatusId] = useState(
     issue?.statusId ?? defaultStatusId ?? workflow?.statuses[0]?.id ?? '',
   )
-  const [sprintId, setSprintId] = useState<string | null>(issue ? issue.sprintId : defaultSprintId)
+  const [planningMonth, setPlanningMonth] = useState(issue ? issueMonth(issue) : initialSchedule?.date?.slice(0, 7) ?? defaultPlanningMonth)
   const [parentId, setParentId] = useState<string | null>(issue?.parentId ?? null)
   const [dueDate, setDueDate] = useState(issue?.dueDate ?? '')
   const [date, setDate] = useState(issue?.date ?? initialSchedule?.date ?? '')
@@ -92,11 +90,11 @@ export function IssueEditor({
   const parentOptions = issues.filter(/* 自分と子孫を親候補から除外・操作対象のIDを除外という条件を満たす要素だけを残す。 */ (i) => i.id !== issueId && !descendants.has(i.id))
   const children = issueId ? issues.filter(/* 指定の親Issueと一致という条件を満たす要素だけを残す。 */ (i) => i.parentId === issueId) : []
 
-  /** 編集中のIssueを同じステータス・スプリント内で1つ上または下へ移動する。 */
+  /** 編集中のIssueを同じステータス・対象月の中で1つ上または下へ移動する。 */
   async function reorder(delta: -1 | 1) {
     if (!issue) return
     try {
-      await moveIssue(issue.id, issue.statusId, position + delta, issue.sprintId)
+      await moveIssue(issue.id, issue.statusId, position + delta, issueMonth(issue))
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
@@ -117,7 +115,7 @@ export function IssueEditor({
     if (!issue || !childTitle.trim() || addingChild) return
     setAddingChild(true)
     try {
-      await createIssue({ title: childTitle, type: 'task', parentId: issue.id, sprintId: issue.sprintId })
+      await createIssue({ title: childTitle, type: 'task', parentId: issue.id, planningMonth })
       setChildTitle('')
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -126,9 +124,10 @@ export function IssueEditor({
     }
   }
 
-  /** 時刻と繰り返し曜日を確認してフォーム値を保存用にまとめ、Issueの新規作成または所属スプリント変更と編集を実行する。 */
+  /** 対象月・時刻・繰り返し曜日を確認し、新規作成または編集内容を保存する。 */
   function onSubmit(e: FormEvent) {
     e.preventDefault()
+    if (!isValidMonth(planningMonth)) { setError('対象月を選択してください'); return }
     const startMin = startTime ? parseTime(startTime) : null
     if (startTime && startMin === null) {
       setError('開始時刻が正しくありません')
@@ -150,12 +149,13 @@ export function IssueEditor({
       startMin,
       durationMin: Number(duration),
       reminderOffsetMin,
+      planningMonth,
+      sprintId: null,
     }
-    void run(/* 新規ならIssueを作成し、編集なら所属スプリントと入力した各項目・繰り返し設定を保存する。 */ async () => {
+    void run(/* 入力した対象月と各項目・繰り返し設定を保存する。 */ async () => {
       if (!issue) {
         await createIssue({
           ...common,
-          sprintId,
           ...(recurrence && {
             recurrence: {
               frequency: recurrence,
@@ -167,7 +167,6 @@ export function IssueEditor({
         })
         return
       }
-      if (sprintId !== issue.sprintId) await assignIssueToSprint(issue.id, sprintId)
       await updateIssue(issue.id, {
         ...common,
         recurrence: recurrence
@@ -281,7 +280,7 @@ export function IssueEditor({
               )}
             </div>
             {recurrence && (
-              <p className="text-xs text-muted">このタスクを完了すると、次回分をバックログに作成します。</p>
+              <p className="text-xs text-muted">対象月内の繰り返し予定を自動で作成します。月を切り替えると、その月の予定も準備します。</p>
             )}
             {recurrence === 'monthly' && (
               <p className="text-xs text-muted">開始日と同じ日にちで繰り返します。その日がない月は月末になります。</p>
@@ -338,19 +337,13 @@ export function IssueEditor({
             </select>
           </label>
           <label className="flex flex-col gap-1 text-sm text-muted">
-            スプリント
-            <select
-              className={FIELD}
-              value={sprintId ?? ''}
-              onChange={/* 入力された値に合わせて所属スプリントIDを更新する。 */ (e) => setSprintId(e.target.value || null)}
-            >
-              <option value="">バックログ</option>
-              {sprintOptions.map(/* 各選択可能なスプリントの表示要素を作り、対応する選択・編集操作を結び付ける。 */ (s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
+            対象月
+            <input type="month" className={FIELD} value={planningMonth}
+              onChange={/* 対象月を変えたとき、別の月にある時刻配置は解除する。 */ (event) => {
+                const month = event.target.value
+                setPlanningMonth(month)
+                if (date && date.slice(0, 7) !== month) { setDate(''); setStartTime('') }
+              }} />
           </label>
           <label className="flex flex-col gap-1 text-sm text-muted">
             親Issue / Epic
@@ -395,7 +388,7 @@ export function IssueEditor({
           <div className="grid grid-cols-3 gap-2">
             <label className="col-span-3 flex flex-col gap-1 text-sm text-muted sm:col-span-1">
               日付
-              <input type="date" className={FIELD} value={date} onChange={/* 入力された値に合わせて日付を更新する。 */ (e) => setDate(e.target.value)} />
+              <input type="date" className={FIELD} value={date} onChange={/* 予定日を変えたら対象月も同じ月に合わせる。 */ (e) => { setDate(e.target.value); if (e.target.value) setPlanningMonth(e.target.value.slice(0, 7)) }} />
             </label>
             <label className="flex flex-col gap-1 text-sm text-muted">
               開始時刻

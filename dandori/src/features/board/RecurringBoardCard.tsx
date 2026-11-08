@@ -70,7 +70,7 @@ export function RecurringBoardCard({ group, rule, statuses, doneIds, pulse, onOp
       <div className="mx-4 mb-3 h-1 overflow-hidden rounded-full bg-surface-2"><div className="h-full rounded-full bg-accent transition-[width]" style={{ width: `${doneCount / group.occurrences.length * 100}%` }} /></div>
       {!expanded && !allDone && <button type="button" disabled={busy} className="mx-4 mb-3 min-h-11 rounded-xl bg-surface-2 px-3 text-xs font-medium disabled:opacity-40"
         onClick={/* 全件ではなく、代表となる次の未完了回だけを完了にする。 */ () => void run(/* 次の1回の完了状態を切り替える。 */ () => onToggleDone(group.issue.id))}>次の1件を完了</button>}
-      {allDone && !expanded && <p className="px-4 pb-4 text-xs text-muted">このスプリントの予定はすべて完了しました</p>}
+      {allDone && !expanded && <p className="px-4 pb-4 text-xs text-muted">この月の予定はすべて完了しました</p>}
       <div id={detailsId} hidden={!expanded} className="border-t border-border">
         <p className="px-4 pt-3 text-[10px] text-muted">日付を押すと編集できます。完了やステータス変更は、その回だけに反映されます。</p>
         <ul className="divide-y divide-border px-2">

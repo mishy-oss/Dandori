@@ -6,6 +6,7 @@ import { useDataStore } from '../store/data'
 import { TimelineScreen } from '../features/timeline/TimelineScreen'
 import { PwaToast } from './PwaToast'
 import { useThemeEffect } from './useThemeEffect'
+import { useMonthlyPlanningEffect } from './useMonthlyPlanningEffect'
 import { Icon } from './Icon'
 import { readPushDeviceToken, syncPushSchedules, PUSH_SETTINGS_CHANGED_EVENT } from '../features/notifications/pushClient'
 
@@ -21,6 +22,7 @@ type TabId = (typeof TABS)[number]['id']
 /** アプリのデータとテーマを初期化し、タブに応じた画面を表示する。タスクや通知設定の変更に合わせて通知予定も同期する。 */
 export function App() {
   useThemeEffect()
+  useMonthlyPlanningEffect()
   const init = useDataStore(/* ストアからinit（保存・状態変更の操作）を取得する。 */ (s) => s.init)
   const ready = useDataStore(/* ストアから初期化の完了状態を取得する。 */ (s) => s.ready)
   const issues = useDataStore(/* ストアからIssueを取得する。 */ (s) => s.issues)

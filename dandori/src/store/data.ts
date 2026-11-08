@@ -2,9 +2,10 @@ import { create } from 'zustand'
 import * as issueRepo from '../db/issueRepo'
 import * as projectRepo from '../db/projectRepo'
 import * as settingsRepo from '../db/settingsRepo'
-import * as sprintRepo from '../db/sprintRepo'
-import { DEFAULT_SETTINGS, type Issue, type Project, type RecurrenceRule, type Settings, type Sprint, type Workflow } from '../db/types'
-import { applyMove } from '../lib/issueOrder'
+import { prepareMonthlyProject, listMonthlySnapshots } from '../db/monthlyRepo'
+import { currentMonth, isValidMonth } from '../lib/month'
+import type { MonthlySnapshot } from '../db/types'
+import { DEFAULT_SETTINGS, type Issue, type Project, type RecurrenceRule, type Settings, type Workflow } from '../db/types'
 
 export interface ScheduleChange {
   date: string | null
@@ -20,7 +21,11 @@ interface DataState {
   currentProjectId: string | null
   issues: Issue[]
   recurrenceRules: RecurrenceRule[]
-  sprints: Sprint[]
+  selectedMonth: string
+  monthlySnapshots: MonthlySnapshot[]
+  selectMonth: (month: string) => Promise<void>
+  refreshPlanning: () => Promise<void>
+  assignIssueToMonth: (issueId: string, month: string) => Promise<void>
 
   init: () => Promise<void>
   updateSettings: (patch: Partial<Omit<Settings, 'id'>>) => Promise<void>
@@ -32,26 +37,19 @@ interface DataState {
     id: string,
     statusId: string,
     index: number,
-    scopeSprintId?: string | null,
+    scopeMonth?: string,
   ) => Promise<void>
   deleteIssue: (id: string) => Promise<void>
   stopRecurrence: (id: string) => Promise<void>
-  createSprint: (input?: sprintRepo.SprintInput) => Promise<Sprint>
-  updateSprint: (id: string, patch: Parameters<typeof sprintRepo.updateSprint>[1]) => Promise<void>
-  deleteSprint: (id: string) => Promise<void>
-  startSprint: (id: string) => Promise<void>
-  completeSprint: (
-    id: string,
-    incomplete: sprintRepo.IncompleteIssuesAction,
-  ) => Promise<sprintRepo.CompleteSprintResult>
-  assignIssueToSprint: (issueId: string, sprintId: string | null) => Promise<void>
+
 }
 
 export const useDataStore = create<DataState>(/* データ一覧と保存操作を持つZustandストアを構築し、DB更新後に最新データへ同期できるようにする。 */ (set, get) => {
-  // プロジェクトは内部的に1つだけ(UIには出さない)。複数ある旧データは最初の1つを使う
+  /** 月別予定の準備・繰り越し・実績記録を行い、現在のプロジェクトの保存済みデータを画面へ反映する。 */
   async function reload() {
     const projects = await projectRepo.listProjects()
     const current = projects[0] ?? null
+    if (current) await prepareMonthlyProject(current.id, get().selectedMonth)
     const workflows: Record<string, Workflow> = {}
     for (const p of projects) {
       const w = await projectRepo.getWorkflow(p.workflowId)
@@ -59,12 +57,7 @@ export const useDataStore = create<DataState>(/* データ一覧と保存操作�
     }
     const issues = current ? await issueRepo.listIssues(current.id) : []
     const recurrenceRules = current ? await issueRepo.listRecurrenceRules(current.id) : []
-    let sprints = current ? await sprintRepo.listSprints(current.id) : []
-    const activeSprint = sprints.find(/* アクティブ状態という条件を最初に満たす要素を探す。 */ (s) => s.state === 'active')
-    if (activeSprint) {
-      await sprintRepo.recordSprintSnapshot(activeSprint.id)
-      sprints = await sprintRepo.listSprints(activeSprint.projectId)
-    }
+    const monthlySnapshots = current ? await listMonthlySnapshots(current.id) : []
     const settings = await settingsRepo.getSettings()
     set({
       ready: true,
@@ -74,7 +67,7 @@ export const useDataStore = create<DataState>(/* データ一覧と保存操作�
       currentProjectId: current?.id ?? null,
       issues,
       recurrenceRules,
-      sprints,
+      monthlySnapshots,
     })
   }
 
@@ -93,7 +86,23 @@ export const useDataStore = create<DataState>(/* データ一覧と保存操作�
     currentProjectId: null,
     issues: [],
     recurrenceRules: [],
-    sprints: [],
+    selectedMonth: currentMonth(),
+    monthlySnapshots: [],
+    /** 選択月を切り替え、その月の繰り返し予定を準備して一覧を再取得する。 */
+    selectMonth: async (month) => {
+      if (!isValidMonth(month)) throw new Error('対象月を正しく指定してください')
+      set({ selectedMonth: month })
+      await reload()
+    },
+    /** 日付変更や画面復帰時に繰り越しと日次実績を更新する。 */
+    refreshPlanning: reload,
+    /** 対象月を変更する。別の月の時刻配置は解除し、旧スプリントの所属は使わない。 */
+    assignIssueToMonth: async (id, month) => {
+      const issue = await issueRepo.getIssue(id)
+      if (!issue) throw new Error('Issueが見つかりません')
+      await issueRepo.updateIssue(id, { planningMonth: month, sprintId: null, ...(issue.date && issue.date.slice(0, 7) !== month ? { date: null, startMin: null } : {}) })
+      await reload()
+    },
 
     /** 端末への永続保存を要求し、既定プロジェクトを準備して全データを読み込む。 */
     init: async () => {
@@ -146,9 +155,9 @@ export const useDataStore = create<DataState>(/* データ一覧と保存操作�
       await issueRepo.updateIssue(id, { statusId: target.id })
       await reload()
     },
-    /** 入力と所属先を検証してIssueを採番・保存する。繰り返し設定がありスプリントに所属する場合は期間内の予定も生成する。 保存後にデータを読み直して画面へ反映する。 */
+    /** 対象月を補ってタスクを作成し、月内の繰り返し予定と最新の月次実績を画面へ反映する。 */
     createIssue: async (input) => {
-      const issue = await issueRepo.createIssue({ ...input, projectId: requireProjectId() })
+      const issue = await issueRepo.createIssue({ ...input, planningMonth: input.planningMonth ?? input.date?.slice(0, 7) ?? input.dueDate?.slice(0, 7) ?? get().selectedMonth, projectId: requireProjectId() })
       await reload()
       return issue
     },
@@ -157,12 +166,10 @@ export const useDataStore = create<DataState>(/* データ一覧と保存操作�
       await issueRepo.updateIssue(id, patch)
       await reload()
     },
-    /** 指定した列内の位置にIssueを移し、隣接Issueの間に入る並び順キーを保存する。完了状態への移動時は次回分の生成も行う。 保存後にデータを読み直して画面へ反映する。 */
-    moveIssue: async (id, statusId, index, scopeSprintId) => {
-      // ドロップ直後に元の位置へ戻って見えないよう、保存前に画面だけ先に更新する
-      set({ issues: applyMove(get().issues, id, statusId, index, scopeSprintId) })
+    /** 指定月のステータス列内で並び順を保存し、保存後のタスクと月次実績を読み直す。 */
+    moveIssue: async (id, statusId, index, scopeMonth) => {
       try {
-        await issueRepo.moveIssue(id, statusId, index, scopeSprintId)
+        await issueRepo.moveIssue(id, statusId, index, undefined, scopeMonth ?? get().selectedMonth)
       } finally {
         await reload()
       }
@@ -177,38 +184,7 @@ export const useDataStore = create<DataState>(/* データ一覧と保存操作�
       await issueRepo.stopRecurrence(id)
       await reload()
     },
-    /** 所属プロジェクトの存在を確認し、入力内容に基づくスプリントをトランザクション内で作成する。 保存後にデータを読み直して画面へ反映する。 */
-    createSprint: async (input) => {
-      const s = await sprintRepo.createSprint(requireProjectId(), input)
-      await reload()
-      return s
-    },
-    /** 完了済みスプリントの編集を防ぎ、名前と期間を検証して指定された項目を保存する。 保存後にデータを読み直して画面へ反映する。 */
-    updateSprint: async (id, patch) => {
-      await sprintRepo.updateSprint(id, patch)
-      await reload()
-    },
-    /** 計画中のスプリントにあるIssueをバックログへ戻し、スプリントを論理削除する。 保存後にデータを読み直して画面へ反映する。 */
-    deleteSprint: async (id) => {
-      await sprintRepo.deleteSprint(id)
-      await reload()
-    },
-    /** 計画中でIssueがあり、別のアクティブスプリントがないことを確認して開始する。 保存後にデータを読み直して画面へ反映する。 */
-    startSprint: async (id) => {
-      await sprintRepo.startSprint(id)
-      await reload()
-    },
-    /** 最終の集計を保存してスプリントを完了し、未完了Issueを指定先へ移す。新規スプリントが選ばれた場合は同じ長さの期間で作成する。 保存後にデータを読み直して画面へ反映する。 */
-    completeSprint: async (id, incomplete) => {
-      const result = await sprintRepo.completeSprint(id, incomplete)
-      await reload()
-      return result
-    },
-    /** 移動先の所属と状態を確認してIssueをスプリントまたはバックログに移す。繰り返しIssueなら移動先期間内の予定も展開する。 保存後にデータを読み直して画面へ反映する。 */
-    assignIssueToSprint: async (issueId, sprintId) => {
-      await sprintRepo.assignIssueToSprint(issueId, sprintId)
-      await reload()
-    },
+
   }
 })
 
@@ -217,7 +193,3 @@ export function selectCurrentProject(s: DataState): Project | null {
   return s.projects.find(/* 指定IDと一致という条件を最初に満たす要素を探す。 */ (p) => p.id === s.currentProjectId) ?? null
 }
 
-/** アクティブ状態のスプリントを1つ取り出し、見つからなければnullを返す。 */
-export function selectActiveSprint(s: DataState): Sprint | null {
-  return s.sprints.find(/* アクティブ状態という条件を最初に満たす要素を探す。 */ (sp) => sp.state === 'active') ?? null
-}

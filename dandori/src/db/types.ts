@@ -48,6 +48,10 @@ export interface Issue {
   dueDate: string | null
   estimateMin: number | null
   sprintId: ID | null
+  /** 月単位の計画対象。旧データは起動時に日付・期限・作成日から補う。 */
+  planningMonth?: string
+  /** 移行前の所属を保存し、既存のスプリント情報を失わないようにする。 */
+  legacySprintId?: ID | null
   rank: string
   // スケジュール(タイムライン用)
   date: string | null
@@ -111,6 +115,15 @@ export interface SprintSnapshot {
   /** Total sprint scope at the time of the snapshot; optional for existing stored snapshots. */
   totalMin?: number
   totalCount?: number
+}
+
+export interface MonthlySnapshot {
+  id: string
+  projectId: ID
+  month: string
+  date: string
+  totalCount: number
+  remainingCount: number
 }
 
 export interface Sprint {
