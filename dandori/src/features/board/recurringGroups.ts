@@ -14,13 +14,13 @@ export function compareOccurrences(a: Issue, b: Issue): number {
     (a.startMin ?? 1440) - (b.startMin ?? 1440) || a.number - b.number
 }
 
-/** 同じプロジェクト・スプリント・繰り返しルールのIssueをまとめ、最も早い未完了回を代表にする。通常Issueは1件ずつ残す。 */
+/** 同じプロジェクト・対象月・繰り返しルールのIssueをまとめ、最も早い未完了回を代表にする。移行前データのみ旧所属で区別する。 */
 export function groupBoardIssues(issues: Issue[], doneIds: Set<string>): BoardIssueGroup[] {
   const groups = new Map<string, BoardIssueGroup>()
   for (const issue of issues) {
     if (issue.deletedAt !== null) continue
     const key = JSON.stringify(issue.recurrenceId
-      ? ['recurrence', issue.projectId, issue.sprintId, issue.recurrenceId]
+      ? ['recurrence', issue.projectId, issue.planningMonth ?? issue.sprintId, issue.recurrenceId]
       : ['issue', issue.id])
     const group = groups.get(key)
     if (group) group.occurrences.push(issue)

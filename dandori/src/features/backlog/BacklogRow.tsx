@@ -41,7 +41,7 @@ export function BacklogRow({
           aria-hidden
           className="absolute inset-0 flex items-center justify-end bg-accent/20 px-4 text-sm font-semibold text-accent"
         >
-          スプリントへ移動 →
+          対象月を変更 →
         </div>
       )}
       <div

@@ -3,9 +3,9 @@ import { ja } from 'date-fns/locale/ja'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Issue } from '../../db/types'
 import { addDaysStr, todayStr } from '../../lib/date'
-import { selectActiveSprint, selectCurrentProject, useDataStore } from '../../store/data'
+import { selectCurrentProject, useDataStore } from '../../store/data'
+import { issueMonth } from '../../lib/month'
 import { IssueEditor } from '../issue-editor/IssueEditor'
-import { SprintOverdueBanner } from '../sprint/SprintOverdueBanner'
 import { TimelineGrid } from './TimelineGrid'
 import { UnplacedTray } from './UnplacedTray'
 import { WeekStrip } from './WeekStrip'
@@ -19,7 +19,7 @@ type EditorState = { issue: Issue } | { create: { startMin: number | null } } | 
 export function TimelineScreen() {
   const project = useDataStore(selectCurrentProject)
   const workflow = useDataStore(/* 現在のプロジェクトに対応するワークフローをストアから取得する。 */ (s) => (project ? s.workflows[project.workflowId] : undefined))
-  const sprint = useDataStore(selectActiveSprint)
+  const selectMonth = useDataStore(/* 週表示で月をまたいだ際に、その月の繰り返しを準備する。 */ (state) => state.selectMonth)
   const issues = useDataStore(/* ストアからIssueを取得する。 */ (s) => s.issues)
   const settings = useDataStore(/* ストアから画面設定を取得する。 */ (s) => s.settings)
   const ready = useDataStore(/* ストアから初期化の完了状態を取得する。 */ (s) => s.ready)
@@ -32,6 +32,9 @@ export function TimelineScreen() {
   const [selected, setSelected] = useState(() => todayStr())
   const [editor, setEditor] = useState<EditorState>(null)
   const [error, setError] = useState<string | null>(null)
+  useEffect(/* 選択日の月に必要な繰り返し予定を用意する。 */ () => {
+    if (useDataStore.getState().selectedMonth !== selected.slice(0, 7)) void selectMonth(selected.slice(0, 7)).catch(/* 予定生成に失敗した場合は画面へ表示する。 */ (cause) => setError(cause instanceof Error ? cause.message : String(cause)))
+  }, [selected, selectMonth])
 
   const rootRef = useRef<HTMLDivElement>(null)
   const gridRef = useRef<HTMLDivElement>(null)
@@ -49,14 +52,8 @@ export function TimelineScreen() {
   )
   /** 未配置のIssueを関連データから計算し、依存する値が変わるまで結果を再利用する。 */
   const unplaced = useMemo(
-    () =>
-      sprint
-        ? issues.filter(
-            /** 未完了・指定スプリントまたはバックログと一致・開始時刻が未設定・Epic以外という条件を満たす要素だけを残す。 */
-            (i) => i.sprintId === sprint.id && i.startMin === null && i.type !== 'epic' && !doneIds.has(i.statusId),
-          )
-        : [],
-    [issues, sprint, doneIds],
+    () => issues.filter(/* 選択月の未完了かつ時刻未配置の作業タスクを取り出す。 */ (issue) => issueMonth(issue) === selected.slice(0, 7) && issue.startMin === null && issue.type !== 'epic' && !doneIds.has(issue.statusId)),
+    [issues, selected, doneIds],
   )
   /** 選択日の予定がすべて見えるよう、設定と配置時刻からタイムラインの表示範囲を計算する。 */
   const range = useMemo(
@@ -152,13 +149,11 @@ export function TimelineScreen() {
         onShiftWeek={/* 操作内容に合わせて選択日を更新する。 */ (d) => setSelected(addDaysStr(selected, d * 7))}
       />
 
-      <SprintOverdueBanner />
 
       <div className="timeline-sheet flex min-h-0 flex-1 flex-col">
       <UnplacedTray
         issues={unplaced}
         drag={drag}
-        hasSprint={sprint !== null}
         onOpen={/* 対象Issueの編集画面を開く。 */ (i) => setEditor({ issue: i })}
         shouldSuppressClick={shouldSuppressClick}
       />
@@ -198,7 +193,7 @@ export function TimelineScreen() {
         <IssueEditor
           key={'issue' in editor ? editor.issue.id : `new-${editor.create.startMin}`}
           issue={'issue' in editor ? editor.issue : null}
-          defaultSprintId={sprint?.id ?? null}
+          defaultPlanningMonth={selected.slice(0, 7)}
           initialSchedule={
             'create' in editor
               ? {

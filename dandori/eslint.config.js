@@ -5,7 +5,8 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import tseslint from 'typescript-eslint'
 
 export default tseslint.config(
-  { ignores: ['dist', 'dev-dist'] },
+  // Wranglerの自動生成型は再生成で上書きされるため、Lint対象から除外する。
+  { ignores: ['dist', 'dev-dist', 'worker-configuration.d.ts'] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ['**/*.{ts,tsx}'],

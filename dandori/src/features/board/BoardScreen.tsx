@@ -1,30 +1,32 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Issue } from '../../db/types'
 import { columnIssues } from '../../lib/issueOrder'
-import { selectActiveSprint, selectCurrentProject, useDataStore } from '../../store/data'
+import { selectCurrentProject, useDataStore } from '../../store/data'
+import { issueMonth } from '../../lib/month'
+import { MonthNavigator } from '../monthly/MonthNavigator'
+import { MonthlyBurndown } from '../monthly/MonthlyBurndown'
 import { IssueEditor } from '../issue-editor/IssueEditor'
-import { SprintOverdueBanner } from '../sprint/SprintOverdueBanner'
 import { BoardCard } from './BoardCard'
 import { wipStatus } from './boardLogic'
 import { useBoardGestures } from './useBoardGestures'
 import { groupBoardIssues, groupedDropIndex, type BoardIssueGroup } from './recurringGroups'
 import { RecurringBoardCard } from './RecurringBoardCard'
 
-// アクティブスプリントのIssueだけを表示するカンバン
+/** 選択月のタスクをステータス別に表示する。繰り返しは1枚へ集約し、月別の並べ替えと各回の編集を提供する。 */
 export function BoardScreen() {
   const project = useDataStore(selectCurrentProject)
   const workflow = useDataStore(/* 現在のプロジェクトに対応するワークフローをストアから取得する。 */ (s) => (project ? s.workflows[project.workflowId] : undefined))
   const allIssues = useDataStore(/* ストアからIssueを取得する。 */ (s) => s.issues)
   const recurrenceRules = useDataStore(/* カードに表示する繰り返し頻度を取得する。 */ (s) => s.recurrenceRules)
-  const sprint = useDataStore(selectActiveSprint)
+  const month = useDataStore(/* 選択されている対象月を読む。 */ (state) => state.selectedMonth)
   const ready = useDataStore(/* ストアから初期化の完了状態を取得する。 */ (s) => s.ready)
   const moveIssue = useDataStore(/* ストアからmoveIssue（保存・状態変更の操作）を取得する。 */ (s) => s.moveIssue)
   const toggleIssueDone = useDataStore(/* ストアからtoggleIssueDone（保存・状態変更の操作）を取得する。 */ (s) => s.toggleIssueDone)
 
   /** Issueを関連データから計算し、依存する値が変わるまで結果を再利用する。 */
   const issues = useMemo(
-    () => (sprint ? allIssues.filter(/* 指定スプリントまたはバックログと一致という条件を満たす要素だけを残す。 */ (i) => i.sprintId === sprint.id) : []),
-    [allIssues, sprint],
+    () => allIssues.filter(/* 表示月に所属するタスクを取り出す。 */ (issue) => issueMonth(issue) === month),
+    [allIssues, month],
   )
   const [columnIndex, setColumnIndex] = useState(0)
   const [editing, setEditing] = useState<Issue | 'new' | null>(null)
@@ -65,11 +67,11 @@ export function BoardScreen() {
   /** 指定列の指定位置へIssueを保存し、操作対象を強調する。保存に失敗した場合はエラーを表示する。 */
   async function move(issueId: string, statusIdx: number, index: number) {
     const status = statuses[statusIdx]
-    if (!status || !sprint) return
+    if (!status) return
     setPulseId(issueId)
     try {
       setError(null)
-      await moveIssue(issueId, status.id, index, sprint.id)
+      await moveIssue(issueId, status.id, index, month)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
@@ -83,30 +85,19 @@ export function BoardScreen() {
     /** アニメーション後の最新のIssue一覧から移動先列の末尾を求め、スワイプしたIssueをそこへ移す。 */
     onSwipeMove: (id, target) => {
       // 実行時点の最新の並びの末尾へ入れる(アニメーション待ちの間に状態が変わりうるため)
-      const latest = useDataStore.getState().issues
-      void move(id, target, columnIssues(latest, statuses[target].id, sprint?.id).length)
+      const latest = useDataStore.getState().issues.filter(/* 表示月のタスクだけで列末尾を求める。 */ (issue) => issueMonth(issue) === month)
+      void move(id, target, columnIssues(latest, statuses[target].id).length)
     },
     /** 表示上のカード数から、非表示の繰り返し回も含む保存先列の挿入位置を求める。 */
     onDrop: (id, col, index) => {
       const status = statuses[col]
-      if (!status || !sprint) return
-      const latest = useDataStore.getState().issues.filter(/* 現在のスプリント内だけで位置を計算する。 */ (issue) => issue.sprintId === sprint.id)
+      if (!status) return
+      const latest = useDataStore.getState().issues.filter(/* 表示月だけでカードの挿入位置を計算する。 */ (issue) => issueMonth(issue) === month)
       void move(id, col, groupedDropIndex(latest, doneIds, id, status.id, index))
     },
   })
 
   if (!ready || !project || !active) return null
-
-  if (!sprint) {
-    return (
-      <section className="flex flex-col gap-4 p-4">
-        <h1 className="text-2xl font-bold">Board</h1>
-        <p className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted">
-          アクティブなスプリントがありません。Backlog でスプリントにIssueを追加して開始してください
-        </p>
-      </section>
-    )
-  }
 
   const column = groups.filter(/* 次の未完了回が現在の列にあるカードを表示する。 */ (group) => group.issue.statusId === active.id)
   const actualCount = columnIssues(issues, active.id).length
@@ -137,11 +128,15 @@ export function BoardScreen() {
       <div>
         <h1 className="text-2xl font-bold">Board</h1>
         <p className="text-sm text-muted">
-          {sprint.name}({sprint.startDate} 〜 {sprint.endDate})
+          月ごとのタスクをステータス別に管理します
         </p>
       </div>
 
-      <SprintOverdueBanner />
+      <MonthNavigator />
+      <details className="rounded-2xl border border-border bg-surface">
+        <summary className="cursor-pointer p-3 text-xs font-medium">月次バーンダウンを見る</summary>
+        <MonthlyBurndown />
+      </details>
 
       <div role="tablist" aria-label="ステータス" className="-mx-4 flex gap-2 overflow-x-auto px-4">
         {statuses.map(/* 各ステータスの表示要素を作り、対応する選択・編集操作を結び付ける。 */ (s, i) => {
@@ -218,8 +213,8 @@ export function BoardScreen() {
                 onToggleDone={toggleDone}
                 onChangeStatus={/* 展開一覧から選択した回だけを、移動先列の末尾へ保存する。 */ async (id, statusId) => {
                   const statusIndex = statuses.findIndex(/* ステータスIDを列番号へ変換する。 */ (status) => status.id === statusId)
-                  const latest = useDataStore.getState().issues
-                  await move(id, statusIndex, columnIssues(latest, statusId, sprint.id).length)
+                  const latest = useDataStore.getState().issues.filter(/* 表示月内の変更先列を数える。 */ (issue) => issueMonth(issue) === month)
+                  await move(id, statusIndex, columnIssues(latest, statusId).length)
                 }}
               />
             </li>
@@ -290,7 +285,7 @@ export function BoardScreen() {
           key={editing === 'new' ? 'new' : editing.id}
           issue={editing === 'new' ? null : editing}
           defaultStatusId={active.id}
-          defaultSprintId={sprint.id}
+          defaultPlanningMonth={month}
           onClose={/* Issue編集画面を閉じる。 */ () => setEditing(null)}
         />
       )}
