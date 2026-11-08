@@ -1,11 +1,13 @@
 import { db } from './db'
 import { DEFAULT_SETTINGS, type Settings } from './types'
 
+/** 保存された設定を既定値に重ね、未保存の項目にも値がある状態で返す。 */
 export async function getSettings(): Promise<Settings> {
   const row = await db.settings.get('main')
   return { ...DEFAULT_SETTINGS, ...row }
 }
 
+/** 表示時間帯・既定の所要時間・週の開始曜日を検証し、設定を保存して返す。 */
 export async function updateSettings(patch: Partial<Omit<Settings, 'id'>>): Promise<Settings> {
   const next = { ...(await getSettings()), ...patch }
   const { dayStartHour: s, dayEndHour: e, defaultDuration: d } = next

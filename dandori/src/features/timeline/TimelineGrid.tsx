@@ -19,6 +19,7 @@ interface Props {
   shouldSuppressClick: () => boolean
 }
 
+/** 予定を開始時刻と所要時間に合わせて配置し、重なる予定を横に並べる。ドラッグのプレビュー・現在時刻線・編集操作も表示する。 */
 export function TimelineGrid({
   gridRef,
   range,
@@ -35,7 +36,7 @@ export function TimelineGrid({
   const height = (range.endMin - range.startMin) * PX_PER_MIN
 
   // ドラッグ中のプレビュー位置/長さを反映して重なりを再計算する
-  const shown = blocks.map((b) => {
+  const shown = blocks.map(/* ドラッグ対象にはプレビューの開始時刻や所要時間を使い、他の予定は保存済みの値を使う。 */ (b) => {
     if (drag?.kind === 'move' && drag.id === b.id) return { issue: b, startMin: drag.startMin, durationMin: b.durationMin }
     if (drag?.kind === 'resize' && drag.id === b.id) return { issue: b, startMin: b.startMin!, durationMin: drag.durationMin }
     if (drag?.kind === 'resize-top' && drag.id === b.id) {
@@ -44,16 +45,17 @@ export function TimelineGrid({
     return { issue: b, startMin: b.startMin!, durationMin: b.durationMin }
   })
   const layout = new Map(
-    layoutBlocks(shown.map((s) => ({ id: s.issue.id, startMin: s.startMin, durationMin: s.durationMin }))).map((l) => [l.id, l]),
+    layoutBlocks(shown.map(/* 予定の重なり計算に使うIssueのID・開始時刻・所要時間を取り出す。 */ (s) => ({ id: s.issue.id, startMin: s.startMin, durationMin: s.durationMin }))).map(/* IssueのIDをキー、列番号と列数を値にしたMap用の組を作る。 */ (l) => [l.id, l]),
   )
 
   const firstHour = Math.ceil(range.startMin / 60)
   const lastHour = Math.floor(range.endMin / 60)
-  const hours = Array.from({ length: lastHour - firstHour + 1 }, (_, i) => firstHour + i)
+  const hours = Array.from({ length: lastHour - firstHour + 1 }, /* 添字から時間目盛りまたは選択肢となる連続した値を作る。 */ (_, i) => firstHour + i)
 
   // 押下が空き枠で始まったときだけ「空き枠タップ」とみなす(ブロックから動かして離した場合を除く)
   const downOnGrid = useRef(false)
 
+  /** 空き枠から始まったタップだけを受け付け、その位置を15分刻みの開始時刻にして新規作成画面を開く。 */
   function onGridClick(e: React.MouseEvent<HTMLDivElement>) {
     if (e.target !== e.currentTarget || !downOnGrid.current || shouldSuppressClick()) return
     const rect = e.currentTarget.getBoundingClientRect()
@@ -69,12 +71,12 @@ export function TimelineGrid({
         aria-label="タイムライン(空き枠をタップして新規作成)"
         className="absolute inset-0"
         onClick={onGridClick}
-        onPointerDownCapture={(e) => {
+        onPointerDownCapture={/* 押し始めた対象が空きグリッド自身かを記録し、予定から指を離した操作と空き枠タップを区別する。 */ (e) => {
           downOnGrid.current = e.target === e.currentTarget
         }}
-        onContextMenu={(e) => e.preventDefault()}
+        onContextMenu={/* 長押しや右クリックによる標準メニューを抑止し、ジェスチャー操作を続けられるようにする。 */ (e) => e.preventDefault()}
       >
-        {hours.map((h) => (
+        {hours.map(/* 各時間目盛りの表示要素を作り、対応する選択・編集操作を結び付ける。 */ (h) => (
           <div
             key={h}
             aria-hidden
@@ -95,7 +97,7 @@ export function TimelineGrid({
           />
         )}
 
-        {shown.map(({ issue, startMin, durationMin }) => {
+        {shown.map(/* 各表示用の予定の表示要素を作り、対応する選択・編集操作を結び付ける。 */ ({ issue, startMin, durationMin }) => {
           const l = layout.get(issue.id)!
           const done = doneIds.has(issue.statusId)
           const active = drag !== null && drag.kind !== 'tray' && drag.id === issue.id
@@ -108,10 +110,10 @@ export function TimelineGrid({
               tabIndex={0}
               data-block-id={issue.id}
               aria-label={`${issue.title} ${formatMin(startMin)}から${durationMin}分`}
-              onClick={() => {
+              onClick={/* 直前にジェスチャー操作をしていない場合だけ、対象Issueの編集画面を開く。 */ () => {
                 if (!shouldSuppressClick()) onOpen(issue)
               }}
-              onKeyDown={(e) => {
+              onKeyDown={/* Enterまたはスペースで対象Issueを開き、キーボードからも編集できるようにする。 */ (e) => {
                 if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
                   e.preventDefault()
                   onOpen(issue)
@@ -137,7 +139,7 @@ export function TimelineGrid({
                   data-no-drag
                   aria-label={done ? '未完了に戻す' : '完了にする'}
                   aria-pressed={done}
-                  onClick={(e) => {
+                  onClick={/* クリックの伝播を止め、対象Issueの完了状態を切り替える。 */ (e) => {
                     e.stopPropagation()
                     onToggleDone(issue)
                   }}

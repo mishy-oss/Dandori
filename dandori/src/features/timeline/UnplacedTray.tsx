@@ -2,6 +2,7 @@ import type { Issue } from '../../db/types'
 import { formatIssueNumber } from '../../lib/issueNumber'
 import type { TimelineDrag } from './useTimelineGestures'
 
+/** アクティブスプリントの未配置Issueを横並びで表示し、編集とタイムラインへのドラッグ配置を受け付ける。 */
 export function UnplacedTray({
   issues,
   drag,
@@ -15,7 +16,7 @@ export function UnplacedTray({
   onOpen: (issue: Issue) => void
   shouldSuppressClick: () => boolean
 }) {
-  const ghost = drag?.kind === 'tray' ? issues.find((i) => i.id === drag.id) : undefined
+  const ghost = drag?.kind === 'tray' ? issues.find(/* 指定IDと一致という条件を最初に満たす要素を探す。 */ (i) => i.id === drag.id) : undefined
 
   return (
     <section aria-label="未配置のIssue" className="flex flex-col gap-1">
@@ -29,22 +30,22 @@ export function UnplacedTray({
         </p>
       ) : (
         <ul className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
-          {issues.map((i) => (
+          {issues.map(/* 各Issueの表示要素を作り、対応する選択・編集操作を結び付ける。 */ (i) => (
             <li key={i.id} className="shrink-0">
               <div
                 role="button"
                 tabIndex={0}
                 data-tray-id={i.id}
-                onClick={() => {
+                onClick={/* 直前にジェスチャー操作をしていない場合だけ、対象Issueの編集画面を開く。 */ () => {
                   if (!shouldSuppressClick()) onOpen(i)
                 }}
-                onKeyDown={(e) => {
+                onKeyDown={/* Enterまたはスペースで対象Issueを開き、キーボードからも編集できるようにする。 */ (e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault()
                     onOpen(i)
                   }
                 }}
-                onContextMenu={(e) => e.preventDefault()}
+                onContextMenu={/* 長押しや右クリックによる標準メニューを抑止し、ジェスチャー操作を続けられるようにする。 */ (e) => e.preventDefault()}
                 className={`flex min-h-11 max-w-48 touch-pan-x select-none flex-col justify-center rounded-lg border border-border bg-surface px-3 py-1 [-webkit-touch-callout:none] ${
                   ghost?.id === i.id ? 'opacity-40' : ''
                 }`}

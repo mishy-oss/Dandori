@@ -7,42 +7,44 @@ interface Point {
   ideal: number
 }
 
+/** 末端の作業Issueと日別スナップショットから、バーンダウンの実績線・理想線・残作業量を計算する。見積があれば分、なければ件数を使う。 */
 function buildPoints(sprint: Sprint, issues: Issue[], doneIds: Set<string>): { points: Point[]; unit: string; current: number; total: number } | null {
-  const snapshots = [...sprint.snapshots].sort((a, b) => a.date.localeCompare(b.date))
-  const sprintIssues = issues.filter((i) => i.sprintId === sprint.id && i.deletedAt === null)
-  const parentsWithChildren = new Set(sprintIssues.flatMap((i) => (i.parentId ? [i.parentId] : [])))
-  const workItems = sprintIssues.filter((i) => i.type !== 'epic' && !parentsWithChildren.has(i.id))
-  const currentCount = workItems.filter((i) => !doneIds.has(i.statusId)).length
+  const snapshots = [...sprint.snapshots].sort(/* 日付文字列を比較し、古い日付から順に並べる。 */ (a, b) => a.date.localeCompare(b.date))
+  const sprintIssues = issues.filter(/* 未削除・指定スプリントまたはバックログと一致という条件を満たす要素だけを残す。 */ (i) => i.sprintId === sprint.id && i.deletedAt === null)
+  const parentsWithChildren = new Set(sprintIssues.flatMap(/* 子を持つ親IssueのIDを抜き出し、集計で親と子を二重に数えないようにする。 */ (i) => (i.parentId ? [i.parentId] : [])))
+  const workItems = sprintIssues.filter(/* Epic以外・子を持たない作業単位という条件を満たす要素だけを残す。 */ (i) => i.type !== 'epic' && !parentsWithChildren.has(i.id))
+  const currentCount = workItems.filter(/* 未完了という条件を満たす要素だけを残す。 */ (i) => !doneIds.has(i.statusId)).length
   const currentMin = workItems
-    .filter((i) => !doneIds.has(i.statusId))
-    .reduce((sum, i) => sum + (i.estimateMin ?? 0), 0)
+    .filter(/* 未完了という条件を満たす要素だけを残す。 */ (i) => !doneIds.has(i.statusId))
+    .reduce(/* 見積時間を加算し、未設定の見積は0分として合計する。 */ (sum, i) => sum + (i.estimateMin ?? 0), 0)
   const latest = snapshots.at(-1)
-  const useMinutes = snapshots.some((s) => (s.totalMin ?? s.remainingMin) > 0) || workItems.some((i) => (i.estimateMin ?? 0) > 0)
+  const useMinutes = snapshots.some(/* 見積時間が設定済みという条件を満たす要素が1つでもあるかを判定する。 */ (s) => (s.totalMin ?? s.remainingMin) > 0) || workItems.some(/* 見積時間が設定済みという条件を満たす要素が1つでもあるかを判定する。 */ (i) => (i.estimateMin ?? 0) > 0)
+  /** グラフで使用する単位に合わせて、スナップショットの残作業量または総作業量を取り出す。 */
   const value = (snapshot: SprintSnapshot, remaining: boolean) =>
     useMinutes
       ? remaining ? snapshot.remainingMin : (snapshot.totalMin ?? snapshot.remainingMin)
       : remaining ? snapshot.remainingCount : (snapshot.totalCount ?? snapshot.remainingCount)
   const total = useMinutes
-    ? (latest ? value(latest, false) : workItems.reduce((sum, i) => sum + (i.estimateMin ?? 0), 0))
+    ? (latest ? value(latest, false) : workItems.reduce(/* 見積時間を加算し、未設定の見積は0分として合計する。 */ (sum, i) => sum + (i.estimateMin ?? 0), 0))
     : (latest ? value(latest, false) : workItems.length)
   const actualNow = sprint.state === 'closed' && latest
     ? useMinutes ? latest.remainingMin : latest.remainingCount
     : useMinutes ? currentMin : currentCount
   if (!snapshots.length && total === 0) return null
 
-  const firstSnapshot = snapshots.find((s) => s.date >= sprint.startDate) ?? snapshots[0]
+  const firstSnapshot = snapshots.find(/* 対象となる日付範囲内という条件を最初に満たす要素を探す。 */ (s) => s.date >= sprint.startDate) ?? snapshots[0]
   const baseline = firstSnapshot
     ? Math.max(value(firstSnapshot, false), value(firstSnapshot, true))
     : total
   const span = Math.max(1, Math.round((Date.parse(`${sprint.endDate}T00:00:00`) - Date.parse(`${sprint.startDate}T00:00:00`)) / 86_400_000))
   const allDates: string[] = []
   for (let date = sprint.startDate; date <= sprint.endDate; date = addDaysStr(date, 1)) allDates.push(date)
-  const availableSnapshots = snapshots.filter((s) => s.date >= sprint.startDate)
+  const availableSnapshots = snapshots.filter(/* 対象となる日付範囲内という条件を満たす要素だけを残す。 */ (s) => s.date >= sprint.startDate)
   let lastActual = baseline
-  const points = allDates.map((date, index) => {
-    const exact = availableSnapshots.filter((s) => s.date === date).at(-1)
+  const points = allDates.map(/* その日のスナップショットで実績を更新し、欠けている日は前回の実績を引き継いで理想値と組み合わせる。 */ (date, index) => {
+    const exact = availableSnapshots.filter(/* 指定日と一致という条件を満たす要素だけを残す。 */ (s) => s.date === date).at(-1)
     const lateFinal = date === sprint.endDate
-      ? availableSnapshots.filter((s) => s.date > sprint.endDate).at(-1)
+      ? availableSnapshots.filter(/* 対象となる日付範囲内という条件を満たす要素だけを残す。 */ (s) => s.date > sprint.endDate).at(-1)
       : undefined
     if (exact) lastActual = value(exact, true)
     else if (lateFinal) lastActual = value(lateFinal, true)
@@ -51,6 +53,7 @@ function buildPoints(sprint: Sprint, issues: Issue[], doneIds: Set<string>): { p
   return { points, unit: useMinutes ? '分' : '件', current: actualNow, total: baseline }
 }
 
+/** スプリントの日別の残作業と理想的な減少をSVGの折れ線で描き、現在の残量と集計単位を表示する。 */
 export function BurndownChart({ sprint, issues, doneIds }: { sprint: Sprint; issues: Issue[]; doneIds: Set<string> }) {
   const result = buildPoints(sprint, issues, doneIds)
   if (!result) {
@@ -67,9 +70,10 @@ export function BurndownChart({ sprint, issues, doneIds }: { sprint: Sprint; iss
   const plotWidth = width - left - right
   const plotHeight = height - top - bottom
   const max = Math.max(1, total)
+  /** 日付の位置と作業量を、グラフ上のX・Y座標を表す文字列へ変換する。 */
   const pointAt = (value: number, index: number) =>
     `${left + (index / Math.max(points.length - 1, 1)) * plotWidth},${top + (1 - value / max) * plotHeight}`
-  const ideal = points.map((p, i) => pointAt(p.ideal, i)).join(' ')
+  const ideal = points.map(/* 各日の作業量をグラフ上の座標文字列へ変換する。 */ (p, i) => pointAt(p.ideal, i)).join(' ')
   const currentDate = sprint.state === 'closed'
     ? sprint.endDate
     : todayStr() < sprint.startDate
@@ -78,9 +82,9 @@ export function BurndownChart({ sprint, issues, doneIds }: { sprint: Sprint; iss
         ? sprint.endDate
         : todayStr()
   const actual = points
-    .map((p, i) => ({ p, i }))
-    .filter(({ p }) => p.date <= currentDate)
-    .map(({ p, i }) => pointAt(p.actual, i))
+    .map(/* 後段の期間フィルターでも元の日付位置を使えるよう、グラフ点に添字を組み合わせる。 */ (p, i) => ({ p, i }))
+    .filter(/* 対象となる日付範囲内という条件を満たす要素だけを残す。 */ ({ p }) => p.date <= currentDate)
+    .map(/* 各日の作業量をグラフ上の座標文字列へ変換する。 */ ({ p, i }) => pointAt(p.actual, i))
     .join(' ')
   const middle = points[Math.floor((points.length - 1) / 2)]
   const last = points.at(-1)!

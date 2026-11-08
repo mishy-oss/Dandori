@@ -4,6 +4,7 @@ import { BacklogRow } from './BacklogRow'
 
 const STATE_LABEL = { planned: '計画中', active: 'アクティブ', closed: '完了' } as const
 
+/** スプリントの期間・件数・バーンダウンと所属Issueを表示し、状態に応じた開始・完了・編集・削除操作を提供する。 */
 export function SprintSection({
   sprint,
   issues,
@@ -105,19 +106,19 @@ export function SprintSection({
         </p>
       ) : (
         <ul className="flex flex-col gap-2">
-          {issues.map((i) => {
-            const children = allIssues.filter((child) => child.parentId === i.id)
+          {issues.map(/* 各Issueの表示要素を作り、対応する選択・編集操作を結び付ける。 */ (i) => {
+            const children = allIssues.filter(/* 指定の親Issueと一致という条件を満たす要素だけを残す。 */ (child) => child.parentId === i.id)
             return <li key={i.id}>
               <BacklogRow
                 issue={i}
                 done={doneIds.has(i.statusId)}
                 statusName={statusName(i.statusId)}
-                parentIssue={i.parentId ? allIssues.find((parent) => parent.id === i.parentId) : undefined}
+                parentIssue={i.parentId ? allIssues.find(/* 指定IDと一致という条件を最初に満たす要素を探す。 */ (parent) => parent.id === i.parentId) : undefined}
                 childCount={children.length}
-                childDoneCount={children.filter((child) => doneIds.has(child.statusId)).length}
-                onOpen={() => onOpen(i)}
-                onMove={() => onMove(i)}
-                onToggleDone={() => onToggleDone(i)}
+                childDoneCount={children.filter(/* 完了という条件を満たす要素だけを残す。 */ (child) => doneIds.has(child.statusId)).length}
+                onOpen={/* 対象Issueの編集画面を開くよう呼び出し元へ通知する。 */ () => onOpen(i)}
+                onMove={/* 対象Issueの移動先選択を呼び出し元へ依頼する。 */ () => onMove(i)}
+                onToggleDone={/* 対象Issueの完了・未完了状態を切り替える処理を呼び出す。 */ () => onToggleDone(i)}
               />
             </li>
           })}

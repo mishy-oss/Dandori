@@ -21,6 +21,7 @@ export function swipeTargetIndex(
   return target >= 0 && target < columnCount ? target : null
 }
 
+/** 列のIssue数が作業数の上限を超えているかと、件数／上限の表示文字列を返す。 */
 export function wipStatus(
   count: number,
   limit: number | undefined,

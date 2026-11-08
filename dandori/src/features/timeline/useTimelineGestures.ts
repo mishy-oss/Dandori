@@ -52,7 +52,7 @@ interface Session {
 // 上端・下端ハンドルは touch-action: none で、掴んだらすぐ操作できる
 export function useTimelineGestures(options: Options) {
   const optionsRef = useRef(options)
-  useEffect(() => {
+  useEffect(/* イベント処理から最新のオプションを参照できるよう、描画ごとにrefの内容を更新する。 */ () => {
     optionsRef.current = options
   })
 
@@ -63,20 +63,22 @@ export function useTimelineGestures(options: Options) {
   const gestured = useRef(false)
   const teardown = useRef<(() => void) | null>(null)
 
-  useEffect(() => {
+  useEffect(/* 操作領域にタッチ移動の監視を登録し、ドラッグ中だけ標準スクロールを止める。画面から外れるときは監視を解除する。 */ () => {
     const root = options.rootRef.current
     if (!root) return
+    /** ドラッグ中だけタッチによる標準スクロールを抑止し、予定やカードの操作と競合しないようにする。 */
     const onTouchMove = (e: TouchEvent) => {
       if (blockScroll.current && e.cancelable) e.preventDefault()
     }
     root.addEventListener('touchmove', onTouchMove, { passive: false })
-    return () => root.removeEventListener('touchmove', onTouchMove)
+    return /* 登録したイベント監視や待機中のタイマーを解除し、画面破棄後に処理が残らないようにする。 */ () => root.removeEventListener('touchmove', onTouchMove)
     // rootRef は安定した ref なので初回のみ登録する
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  useEffect(() => () => teardown.current?.(), [])
+  useEffect(/* 画面から外れるときに、操作中のジェスチャーのタイマーとイベント監視を解除する処理を登録する。 */ () => /* 画面から外れるときに、操作中のジェスチャーのイベント監視を解除する。 */ () => teardown.current?.(), [])
 
+  /** 直前と同じドラッグ内容なら更新を省き、変化したプレビューだけをrefとReactの状態へ反映する。 */
   const publish = useCallback((next: TimelineDrag | null) => {
     const prev = dragRef.current
     const same =
@@ -90,6 +92,7 @@ export function useTimelineGestures(options: Options) {
     setDrag(next)
   }, [])
 
+  /** ポインター移動量とスクロール差から、移動・リサイズ・新規配置のプレビュー時刻を計算する。 */
   const compute = useCallback((s: Session): TimelineDrag | null => {
     const { range, gridRef, scrollerRef, getTrayDuration } = optionsRef.current
     const scrolled = (scrollerRef.current?.scrollTop ?? 0) - s.scrollTop0
@@ -124,6 +127,7 @@ export function useTimelineGestures(options: Options) {
     return { kind: 'tray', id: s.id, x: s.x, y: s.y, startMin }
   }, [])
 
+  /** 操作対象と開始座標を記録し、長押しまたはリサイズ用のイベント監視を開始する。 */
   const onPointerDown = useCallback(
     (e: ReactPointerEvent) => {
       if (session.current) return
@@ -173,6 +177,7 @@ export function useTimelineGestures(options: Options) {
       session.current = s
       gestured.current = false
 
+      /** 操作用タイマー・描画予約・イベント監視を解除し、通常のスクロールへ戻す。 */
       function finish() {
         if (s.timer !== null) clearTimeout(s.timer)
         if (s.raf !== null) cancelAnimationFrame(s.raf)
@@ -184,6 +189,7 @@ export function useTimelineGestures(options: Options) {
         teardown.current = null
       }
 
+      /** ドラッグ中に上下端で自動スクロールし、変化した位置に合わせて時刻のプレビューを再計算する。 */
       function tick() {
         if (session.current !== s || !s.active) return
         const scroller = optionsRef.current.scrollerRef.current
@@ -196,6 +202,7 @@ export function useTimelineGestures(options: Options) {
         s.raf = requestAnimationFrame(tick)
       }
 
+      /** 操作をドラッグ中へ切り替えてスクロールを抑止し、プレビューと自動スクロールの更新を開始する。 */
       function activate() {
         s.timer = null
         if (session.current !== s || s.active) return
@@ -209,6 +216,7 @@ export function useTimelineGestures(options: Options) {
         s.raf = requestAnimationFrame(tick)
       }
 
+      /** 長押し前の大きな移動なら操作を中止し、ドラッグ開始後は座標に応じて時刻や所要時間のプレビューを更新する。 */
       function onMove(ev: PointerEvent) {
         if (ev.pointerId !== s.pointerId) return
         s.x = ev.clientX
@@ -228,13 +236,14 @@ export function useTimelineGestures(options: Options) {
         publish(compute(s))
       }
 
+      /** ドラッグ結果を確定してプレビューを消し、操作種別に応じて移動・上下端リサイズ・新規配置の保存を呼ぶ。 */
       function onUp(ev: PointerEvent) {
         if (ev.pointerId !== s.pointerId) return
         const wasActive = s.active
         const result = wasActive && (!isHandle || s.moved) ? compute(s) : null
         finish()
         publish(null)
-        if (wasActive) setTimeout(() => (gestured.current = false), 0)
+        if (wasActive) setTimeout(/* 直後のクリック判定が済んだ後でジェスチャーフラグを解除し、次の通常タップを受け付ける。 */ () => (gestured.current = false), 0)
         if (!result) return
         const o = optionsRef.current
         if (result.kind === 'move') o.onMove(result.id, result.startMin)
@@ -243,6 +252,7 @@ export function useTimelineGestures(options: Options) {
         else if (result.startMin !== null) o.onPlace(result.id, result.startMin)
       }
 
+      /** 対象ポインターの操作取消時に監視とタイマーを止め、時刻変更を保存せずプレビューを消す。 */
       function onCancel(ev: PointerEvent) {
         if (ev.pointerId !== s.pointerId) return
         finish()
@@ -260,6 +270,7 @@ export function useTimelineGestures(options: Options) {
     [compute, publish],
   )
 
+  /** 直前の操作がドラッグやスワイプだったかを返し、操作直後の誤った編集画面の表示を防ぐ。 */
   const shouldSuppressClick = useCallback(() => gestured.current, [])
 
   return { drag, onPointerDown, shouldSuppressClick }

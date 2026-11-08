@@ -4,6 +4,7 @@ import type { Issue, Sprint } from '../../db/types'
 import { formatIssueNumber } from '../../lib/issueNumber'
 import { useDataStore } from '../../store/data'
 
+/** 移動対象のIssueと、バックログ・完了していないスプリントの候補を選択ダイアログに表示する。 */
 export function MoveSheet({
   issue,
   sprints,
@@ -13,9 +14,10 @@ export function MoveSheet({
   sprints: Sprint[]
   onClose: () => void
 }) {
-  const assign = useDataStore((s) => s.assignIssueToSprint)
+  const assign = useDataStore(/* ストアからassignIssueToSprint（保存・状態変更の操作）を取得する。 */ (s) => s.assignIssueToSprint)
   const [error, setError] = useState<string | null>(null)
 
+  /** Issueを選択したスプリントまたはバックログへ移動し、成功時に移動先選択を閉じる。 */
   async function move(sprintId: string | null) {
     try {
       await assign(issue.id, sprintId)
@@ -25,7 +27,7 @@ export function MoveSheet({
     }
   }
 
-  const targets = sprints.filter((s) => s.state !== 'closed')
+  const targets = sprints.filter(/* 完了済み以外という条件を満たす要素だけを残す。 */ (s) => s.state !== 'closed')
 
   return (
     <Sheet label="移動先を選択" onClose={onClose}>
@@ -37,17 +39,17 @@ export function MoveSheet({
         <li>
           <button
             disabled={issue.sprintId === null}
-            onClick={() => void move(null)}
+            onClick={/* 選択した移動先へIssueを移す処理を呼び出す。 */ () => void move(null)}
             className="min-h-11 w-full rounded-lg border border-border px-3 text-left disabled:opacity-40"
           >
             バックログ
           </button>
         </li>
-        {targets.map((s) => (
+        {targets.map(/* 各移動先スプリントの表示要素を作り、対応する選択・編集操作を結び付ける。 */ (s) => (
           <li key={s.id}>
             <button
               disabled={issue.sprintId === s.id}
-              onClick={() => void move(s.id)}
+              onClick={/* 選択した移動先へIssueを移す処理を呼び出す。 */ () => void move(s.id)}
               className="min-h-11 w-full rounded-lg border border-border px-3 text-left disabled:opacity-40"
             >
               {s.name}

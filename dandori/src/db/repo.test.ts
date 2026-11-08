@@ -18,29 +18,29 @@ import {
   updateWorkflowStatuses,
 } from './projectRepo'
 
-beforeEach(async () => {
+beforeEach(/* 各テストの前に使用するDBテーブルを空にし、以前のテストの保存データが結果へ影響しないようにする。 */ async () => {
   await Promise.all([db.projects.clear(), db.workflows.clear(), db.issues.clear()])
 })
 
-describe('project / workflow', () => {
-  it('creates a project with a default workflow', async () => {
+describe('project / workflow', /* 「project / workflow」に関するテストをまとめて定義する。 */ () => {
+  it('creates a project with a default workflow', /* プロジェクト作成時に初期ワークフロー・連番・作業数上限が設定されることを検証する。 */ async () => {
     const p = await createProject({ key: 'app', name: ' App ' })
     expect(p.key).toBe('APP')
     expect(p.name).toBe('App')
     expect(p.nextNumber).toBe(1)
     const w = await getWorkflow(p.workflowId)
-    expect(w?.statuses.map((s) => s.category)).toEqual(['todo', 'doing', 'done'])
+    expect(w?.statuses.map(/* 各要素からステータスのカテゴリだけを取り出す。 */ (s) => s.category)).toEqual(['todo', 'doing', 'done'])
     expect(w?.statuses[1].wipLimit).toBe(3)
   })
 
-  it('rejects invalid or duplicate keys and empty names', async () => {
+  it('rejects invalid or duplicate keys and empty names', /* 形式が不正なキー、使用中のキー、空の名前を拒否することを検証する。 */ async () => {
     await createProject({ key: 'APP', name: 'App' })
     await expect(createProject({ key: 'APP', name: 'Dup' })).rejects.toThrow()
     await expect(createProject({ key: '1A', name: 'x' })).rejects.toThrow()
     await expect(createProject({ key: 'OK', name: '  ' })).rejects.toThrow()
   })
 
-  it('updates name/color and soft-deletes with its issues', async () => {
+  it('updates name/color and soft-deletes with its issues', /* 名前と色を更新でき、プロジェクトの論理削除時に関連Issueも一覧から消えることを検証する。 */ async () => {
     const p = await createProject({ key: 'APP', name: 'App' })
     await updateProject(p.id, { name: 'Renamed', color: '#fff' })
     expect((await listProjects())[0]).toMatchObject({ name: 'Renamed', color: '#fff' })
@@ -54,13 +54,13 @@ describe('project / workflow', () => {
     expect(await db.projects.count()).toBe(1)
   })
 
-  it('allows reusing the key of a deleted project', async () => {
+  it('allows reusing the key of a deleted project', /* 削除済みプロジェクトのキーを、新しいプロジェクトで再利用できることを検証する。 */ async () => {
     const p = await createProject({ key: 'APP', name: 'App' })
     await deleteProject(p.id)
     await expect(createProject({ key: 'APP', name: 'New' })).resolves.toBeTruthy()
   })
 
-  it('ensures exactly one default project, even when called concurrently', async () => {
+  it('ensures exactly one default project, even when called concurrently', /* 初期化を同時に呼んでも既定プロジェクトが1つだけ作成されることを検証する。 */ async () => {
     const [a, b] = await Promise.all([ensureDefaultProject(), ensureDefaultProject()])
     expect(a.id).toBe(b.id)
     expect(await listProjects()).toHaveLength(1)
@@ -68,13 +68,13 @@ describe('project / workflow', () => {
     expect((await ensureDefaultProject()).id).toBe(a.id)
   })
 
-  it('keeps an existing project instead of creating a default one', async () => {
+  it('keeps an existing project instead of creating a default one', /* 既存プロジェクトがある場合はそれを使い、新しい既定プロジェクトを作らないことを検証する。 */ async () => {
     const p = await createProject({ key: 'APP', name: 'App' })
     expect((await ensureDefaultProject()).id).toBe(p.id)
     expect(await listProjects()).toHaveLength(1)
   })
 
-  it('validates workflow edits', async () => {
+  it('validates workflow edits', /* 必須カテゴリや使用中の列を削除できず、ステータス名は変更できることを検証する。 */ async () => {
     const p = await createProject({ key: 'APP', name: 'App' })
     const w = (await getWorkflow(p.workflowId))!
     const [todo, doing, done] = w.statuses
@@ -94,8 +94,8 @@ describe('project / workflow', () => {
   })
 })
 
-describe('issue', () => {
-  it('numbers issues per project and ranks them in order', async () => {
+describe('issue', /* 「issue」に関するテストをまとめて定義する。 */ () => {
+  it('numbers issues per project and ranks them in order', /* Issueがプロジェクトごとに採番され、作成順の並び順キーを持つことを検証する。 */ async () => {
     const a = await createProject({ key: 'AAA', name: 'A' })
     const b = await createProject({ key: 'BBB', name: 'B' })
     const i1 = await createIssue({ projectId: a.id, title: 'one' })
@@ -103,10 +103,10 @@ describe('issue', () => {
     const j1 = await createIssue({ projectId: b.id, title: 'other' })
     expect([i1.number, i2.number, j1.number]).toEqual([1, 2, 1])
     expect(i1.rank < i2.rank).toBe(true)
-    expect((await listIssues(a.id)).map((i) => i.title)).toEqual(['one', 'two'])
+    expect((await listIssues(a.id)).map(/* 各要素からタイトルだけを取り出す。 */ (i) => i.title)).toEqual(['one', 'two'])
   })
 
-  it('creates with defaults from the design model', async () => {
+  it('creates with defaults from the design model', /* Issue作成時に種別・優先度・所要時間・未配置状態などの既定値が設定されることを検証する。 */ async () => {
     const p = await createProject({ key: 'APP', name: 'App' })
     const w = (await getWorkflow(p.workflowId))!
     const i = await createIssue({ projectId: p.id, title: 't' })
@@ -124,7 +124,7 @@ describe('issue', () => {
     expect(i.id).toHaveLength(26)
   })
 
-  it('sets completedAt when moved to a done status and keeps the schedule', async () => {
+  it('sets completedAt when moved to a done status and keeps the schedule', /* 完了状態に応じて完了日時が設定・解除され、配置済みの日時は維持されることを検証する。 */ async () => {
     const p = await createProject({ key: 'APP', name: 'App' })
     const w = (await getWorkflow(p.workflowId))!
     const i = await createIssue({ projectId: p.id, title: 't' })
@@ -138,7 +138,7 @@ describe('issue', () => {
     expect(reopened.completedAt).toBeNull()
   })
 
-  it('rejects invalid input', async () => {
+  it('rejects invalid input', /* 空のタイトル、不明な所属やステータス、循環する親子関係などを拒否することを検証する。 */ async () => {
     const p = await createProject({ key: 'APP', name: 'App' })
     const i = await createIssue({ projectId: p.id, title: 't' })
     await expect(createIssue({ projectId: p.id, title: ' ' })).rejects.toThrow()
@@ -152,7 +152,7 @@ describe('issue', () => {
     await expect(updateIssue('nope', { title: 'x' })).rejects.toThrow()
   })
 
-  it('soft-deletes an issue together with its descendants', async () => {
+  it('soft-deletes an issue together with its descendants', /* 親Issueの論理削除時に子孫も一覧から除かれ、関連しないIssueは残ることを検証する。 */ async () => {
     const p = await createProject({ key: 'APP', name: 'App' })
     const epic = await createIssue({ projectId: p.id, title: 'epic', type: 'epic' })
     const sub = await createIssue({ projectId: p.id, title: 'sub', parentId: epic.id })
@@ -160,13 +160,14 @@ describe('issue', () => {
     const other = await createIssue({ projectId: p.id, title: 'other' })
 
     await deleteIssue(epic.id)
-    expect((await listIssues(p.id)).map((i) => i.id)).toEqual([other.id])
+    expect((await listIssues(p.id)).map(/* 各要素からIDだけを取り出す。 */ (i) => i.id)).toEqual([other.id])
     expect(await getIssue(subsub.id)).toBeUndefined()
     expect(await db.issues.count()).toBe(4)
   })
 })
 
-describe('moveIssue', () => {
+describe('moveIssue', /* 「moveIssue」に関するテストをまとめて定義する。 */ () => {
+  /** 並べ替えテスト用にプロジェクト・初期ステータス・3件のIssueを用意する。 */
   async function setup() {
     const p = await createProject({ key: 'APP', name: 'App' })
     const [todo, doing, done] = (await getWorkflow(p.workflowId))!.statuses
@@ -175,10 +176,11 @@ describe('moveIssue', () => {
     const c = await createIssue({ projectId: p.id, title: 'c' })
     return { p, todo, doing, done, a, b, c }
   }
+  /** 指定したプロジェクトとステータスのIssueを並び順に読み込み、比較用のタイトル配列を返す。 */
   const titles = async (projectId: string, statusId: string) =>
-    (await listIssues(projectId)).filter((i) => i.statusId === statusId).map((i) => i.title)
+    (await listIssues(projectId)).filter(/* 指定ステータスと一致という条件を満たす要素だけを残す。 */ (i) => i.statusId === statusId).map(/* 各要素からタイトルだけを取り出す。 */ (i) => i.title)
 
-  it('reorders within a column', async () => {
+  it('reorders within a column', /* 同じ列の先頭・途中・末尾へIssueを正しく並べ替えられることを検証する。 */ async () => {
     const { p, todo, a, b, c } = await setup()
     await moveIssue(c.id, todo.id, 0)
     expect(await titles(p.id, todo.id)).toEqual(['c', 'a', 'b'])
@@ -188,7 +190,7 @@ describe('moveIssue', () => {
     expect(await titles(p.id, todo.id)).toEqual(['c', 'a', 'b'])
   })
 
-  it('moves across columns and manages completedAt and schedule', async () => {
+  it('moves across columns and manages completedAt and schedule', /* 列間移動の順序と完了日時の更新が正しく、スケジュールが維持されることを検証する。 */ async () => {
     const { p, todo, doing, done, a, b } = await setup()
     await updateIssue(a.id, { date: '2026-10-07', startMin: 540 })
 
@@ -206,18 +208,18 @@ describe('moveIssue', () => {
     expect((await moveIssue(a.id, todo.id, 0)).completedAt).toBeNull()
   })
 
-  it('repairs colliding ranks in a column', async () => {
+  it('repairs colliding ranks in a column', /* 並び順キーが衝突していても、再採番して指定した位置へIssueを挿入できることを検証する。 */ async () => {
     const { p, todo, a, b, c } = await setup()
-    await db.issues.bulkUpdate([a, b, c].map((i) => ({ key: i.id, changes: { rank: 'a0' } })))
+    await db.issues.bulkUpdate([a, b, c].map(/* 一括更新するIssueのIDと変更項目を組み合わせる。 */ (i) => ({ key: i.id, changes: { rank: 'a0' } })))
     await moveIssue(c.id, todo.id, 1)
-    const ranks = (await listIssues(p.id)).map((i) => i.rank)
+    const ranks = (await listIssues(p.id)).map(/* 各要素から並び順キーだけを取り出す。 */ (i) => i.rank)
     expect(new Set(ranks).size).toBe(3)
     const column = await titles(p.id, todo.id)
     expect(column).toHaveLength(3)
     expect(column[1]).toBe('c')
   })
 
-  it('rejects unknown issues and statuses', async () => {
+  it('rejects unknown issues and statuses', /* 存在しないIssueやステータスを指定した移動が拒否されることを検証する。 */ async () => {
     const { todo, a } = await setup()
     await expect(moveIssue('nope', todo.id, 0)).rejects.toThrow()
     await expect(moveIssue(a.id, 'bad', 0)).rejects.toThrow()

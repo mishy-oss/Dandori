@@ -9,6 +9,7 @@ export class DandoriDB extends Dexie {
   sprints!: EntityTable<Sprint, 'id'>
   settings!: EntityTable<Settings, 'id'>
 
+  /** IndexedDBの各テーブルと検索インデックスを定義し、バージョン1から5までのスキーマ更新を登録する。 */
   constructor(name = 'dandori') {
     super(name)
     this.version(1).stores({
