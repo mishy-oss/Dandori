@@ -21,12 +21,12 @@ export function SprintOverdueBanner() {
         </p>
         <button
           className="min-h-11 shrink-0 rounded-lg bg-amber-500 px-4 font-semibold text-black"
-          onClick={() => setOpen(true)}
+          onClick={/* 操作内容に合わせてダイアログの表示状態を更新する。 */ () => setOpen(true)}
         >
           完了する
         </button>
       </div>
-      {open && <CompleteSprintDialog sprint={sprint} onClose={() => setOpen(false)} />}
+      {open && <CompleteSprintDialog sprint={sprint} onClose={/* 操作内容に合わせてダイアログの表示状態を更新する。 */ () => setOpen(false)} />}
     </>
   )
 }

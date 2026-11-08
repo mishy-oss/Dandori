@@ -1,5 +1,6 @@
 import { useRegisterSW } from 'virtual:pwa-register/react'
 
+/** Service Workerの更新待ちとオフライン利用の準備完了を通知し、更新・閉じる操作を受け付ける。 */
 export function PwaToast() {
   const {
     needRefresh: [needRefresh, setNeedRefresh],
@@ -9,6 +10,7 @@ export function PwaToast() {
 
   if (!needRefresh && !offlineReady) return null
 
+  /** 更新案内とオフライン利用案内の両方を非表示にする。 */
   const close = () => {
     setNeedRefresh(false)
     setOfflineReady(false)
@@ -28,7 +30,7 @@ export function PwaToast() {
       {needRefresh && (
         <button
           className="min-h-11 rounded-lg bg-accent px-4 text-sm font-semibold text-accent-text"
-          onClick={() => updateServiceWorker(true)}
+          onClick={/* 待機中のService Workerを有効化して、アプリを新しいバージョンへ更新する。 */ () => updateServiceWorker(true)}
         >
           更新
         </button>

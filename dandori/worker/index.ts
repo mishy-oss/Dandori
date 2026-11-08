@@ -14,6 +14,7 @@ type ScheduleInput = { id: string; at: number; title: string }
 type SubscriptionRow = { endpoint: string; p256dh: string; auth: string }
 type JobRow = { id: string; scheduled_at: number; title: string; attempts: number; retry_at: number }
 
+/** 通知APIの応答をJSONで作成し、端末ごとの設定がキャッシュされないようno-storeを付ける。 */
 function json(body: unknown, status = 200): Response {
   return Response.json(body, {
     status,
@@ -21,6 +22,7 @@ function json(body: unknown, status = 200): Response {
   })
 }
 
+/** 購読先URLがHTTPSかつ許可したPushサービスのホストであることを確認する。ユーザー情報や独自ポート付きのURLは拒否する。 */
 function isAllowedPushEndpoint(value: string): boolean {
   try {
     const url = new URL(value)
@@ -38,6 +40,7 @@ function isAllowedPushEndpoint(value: string): boolean {
   }
 }
 
+/** 購読情報に送信先と暗号化用の鍵があるかを確認し、送信先URLが許可対象かも検証する。 */
 function isPushSubscription(value: unknown): value is PushSubscription {
   if (!value || typeof value !== 'object') return false
   const subscription = value as Partial<PushSubscription>
@@ -51,6 +54,7 @@ function isPushSubscription(value: unknown): value is PushSubscription {
 }
 
 export class PushDevice extends DurableObject<Env> {
+  /** 端末ごとのDurable Objectを初期化し、購読情報と通知予定を保持するSQLiteテーブルを用意する。 */
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env)
     ctx.storage.sql.exec(`
@@ -72,6 +76,7 @@ export class PushDevice extends DurableObject<Env> {
     `)
   }
 
+  /** 端末用の内部APIとしてPOSTリクエストを受け、購読・予定の置換・停止・テスト送信の各処理へ振り分ける。 */
   async fetch(request: Request): Promise<Response> {
     const path = new URL(request.url).pathname
     if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
@@ -83,12 +88,14 @@ export class PushDevice extends DurableObject<Env> {
     return json({ error: 'Not found' }, 404)
   }
 
+  /** Content-Lengthが上限を超えていれば拒否し、リクエスト本文をJSONとして読み取る。 */
   private async readJson(request: Request): Promise<unknown> {
     const size = Number(request.headers.get('content-length') ?? 0)
     if (size > 256_000) throw new Error('Request is too large')
     return request.json()
   }
 
+  /** 購読先と鍵を検証し、この端末のPush購読情報をSQLiteに新規登録または上書きする。 */
   private async subscribe(request: Request): Promise<Response> {
     try {
       const body = await this.readJson(request)
@@ -112,6 +119,7 @@ export class PushDevice extends DurableObject<Env> {
     }
   }
 
+  /** 購読登録と通知予定の件数・時刻・文言を検証し、この端末の予定を置き換えて次回のアラームを予約する。 */
   private async replaceSchedules(request: Request): Promise<Response> {
     try {
       const body = await this.readJson(request)
@@ -161,6 +169,7 @@ export class PushDevice extends DurableObject<Env> {
     }
   }
 
+  /** この端末の通知予定と購読情報を削除し、予約済みのアラームも解除する。 */
   private async unsubscribe(): Promise<Response> {
     this.ctx.storage.sql.exec('DELETE FROM notification_job')
     this.ctx.storage.sql.exec('DELETE FROM subscription')
@@ -168,11 +177,13 @@ export class PushDevice extends DurableObject<Env> {
     return json({ ok: true })
   }
 
+  /** 登録された購読先へテスト通知を送信し、Pushサービスの送信結果に応じたAPI応答を返す。 */
   private async sendTestNotification(): Promise<Response> {
     const result = await this.send('Dandoriの通知テストです')
     return result.ok ? json({ ok: true }) : json({ error: result.message }, result.status)
   }
 
+  /** 時刻を迎えた通知を最大50件ずつ送る。送信済みや期限切れは削除し、一時的な失敗は間隔を延ばして再試行する。 */
   async alarm(): Promise<void> {
     const subscriptionRow = this.ctx.storage.sql.exec<SubscriptionRow>(
       'SELECT endpoint, p256dh, auth FROM subscription WHERE id = 1',
@@ -221,6 +232,7 @@ export class PushDevice extends DurableObject<Env> {
     await this.scheduleNextAlarm()
   }
 
+  /** 購読情報とVAPIDキーから暗号化・署名済みのPushリクエストを作り、通知サービスへ送信して結果を返す。 */
   private async send(message: string): Promise<{ ok: true } | { ok: false; status: number; message: string }> {
     const subscriptionRow = this.ctx.storage.sql.exec<SubscriptionRow>(
       'SELECT endpoint, p256dh, auth FROM subscription WHERE id = 1',
@@ -255,6 +267,7 @@ export class PushDevice extends DurableObject<Env> {
     }
   }
 
+  /** 最も早い次回送信・再試行時刻にアラームを設定し、予定がなければ解除する。 */
   private async scheduleNextAlarm(): Promise<void> {
     const next = this.ctx.storage.sql.exec<{ next_at: number | null }>(
       'SELECT MIN(retry_at) AS next_at FROM notification_job',
@@ -267,16 +280,19 @@ export class PushDevice extends DurableObject<Env> {
   }
 }
 
+/** 端末トークンがURL向けBase64の43文字で構成されているかを検証する。 */
 function isDeviceToken(value: unknown): value is string {
   return typeof value === 'string' && /^[A-Za-z0-9_-]{43}$/.test(value)
 }
 
+/** Content-Lengthが上限を超えていれば拒否し、リクエスト本文をJSONとして読み取る。 */
 async function readJson(request: Request): Promise<unknown> {
   const size = Number(request.headers.get('content-length') ?? 0)
   if (size > 256_000) throw new Error('Request is too large')
   return request.json()
 }
 
+/** 端末トークンを検証し、そのトークンに対応するDurable Objectへリクエストを転送する。 */
 async function sendToDevice(request: Request, env: Env, path: string): Promise<Response> {
   try {
     const body = await readJson(request)
@@ -297,6 +313,7 @@ async function sendToDevice(request: Request, env: Env, path: string): Promise<R
 }
 
 export default {
+  /** 公開通知APIの入口。公開鍵取得と端末ごとの購読・予定管理リクエストを処理し、秘密鍵は返さない。 */
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url)
     if (!url.pathname.startsWith('/api/push/')) return new Response(null, { status: 404 })

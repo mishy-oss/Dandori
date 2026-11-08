@@ -5,6 +5,7 @@ import { newId } from '../lib/id'
 import { getProject, getWorkflow } from './projectRepo'
 import { rankAfter } from '../lib/rank'
 
+/** 曜日指定があればその曜日と週の間隔に従い、それ以外は日・週の間隔に従って次回の日付を返す。 */
 function nextDate(rule: RecurrenceRule, date: string): string {
   return rule.frequency === 'weekly' && rule.weekdays?.length
     ? nextWeeklyRecurrenceDate(date, rule.weekdays, rule.interval, rule.startDate)
@@ -12,6 +13,7 @@ function nextDate(rule: RecurrenceRule, date: string): string {
 }
 
 /** Materialize this recurring task's remaining occurrences within its sprint. */
+/** 有効な繰り返しルールに従い、スプリント期間内で未作成の日付のIssueを生成する。ルールの終了日を超える予定は作らない。 */
 export async function expandRecurrenceInSprint(
   source: Issue,
   sprint: Sprint,
@@ -30,7 +32,7 @@ export async function expandRecurrenceInSprint(
 
   const project = await getProject(source.projectId)
   const workflow = project && await getWorkflow(project.workflowId)
-  const todoStatus = workflow?.statuses.find((status) => status.category === 'todo')
+  const todoStatus = workflow?.statuses.find(/* 未着手カテゴリという条件を最初に満たす要素を探す。 */ (status) => status.category === 'todo')
   if (!project || !todoStatus) return
 
   let nextNumber = project.nextNumber
@@ -38,16 +40,16 @@ export async function expandRecurrenceInSprint(
   let lastRank = await db.issues
     .where('projectId')
     .equals(source.projectId)
-    .filter((issue) => issue.deletedAt === null && issue.statusId === todoStatus.id)
+    .filter(/* 未削除・指定ステータスと一致という条件を満たす要素だけを残す。 */ (issue) => issue.deletedAt === null && issue.statusId === todoStatus.id)
     .toArray()
-    .then((issues) => issues.reduce<string | null>((rank, issue) => (!rank || issue.rank > rank ? issue.rank : rank), null))
+    .then(/* 取得したIssue一覧から並び順キーの最大値を求め、末尾への追加位置を決める。 */ (issues) => issues.reduce<string | null>(/* 並び順キーを比較し、これまでの最大値を次の要素へ引き継ぐ。 */ (rank, issue) => (!rank || issue.rank > rank ? issue.rank : rank), null))
 
   while (cursor <= sprint.endDate && (!rule.endDate || cursor <= rule.endDate)) {
     if (cursor >= sprint.startDate && cursor !== source.date) {
       const existing = await db.issues
         .where('recurrenceId')
         .equals(rule.id)
-        .filter((issue) => issue.deletedAt === null && issue.date === cursor)
+        .filter(/* 未削除・指定日と一致という条件を満たす要素だけを残す。 */ (issue) => issue.deletedAt === null && issue.date === cursor)
         .first()
       if (!existing) {
         lastRank = rankAfter(lastRank)

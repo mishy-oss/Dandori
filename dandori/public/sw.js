@@ -3,11 +3,11 @@ import { cleanupOutdatedCaches, precacheAndRoute } from 'workbox-precaching'
 cleanupOutdatedCaches()
 precacheAndRoute(self.__WB_MANIFEST)
 
-self.addEventListener('message', (event) => {
+self.addEventListener('message', /* 更新要求のメッセージを受けたら、待機中のService Workerをすぐ有効化する。 */ (event) => {
   if (event.data?.type === 'SKIP_WAITING') self.skipWaiting()
 })
 
-self.addEventListener('push', (event) => {
+self.addEventListener('push', /* 届いたPushデータからタイトルと本文を取り出し、不足値を補ってOSの通知として表示する。 */ (event) => {
   let payload = {}
   try {
     payload = event.data?.json() ?? {}
@@ -26,14 +26,14 @@ self.addEventListener('push', (event) => {
   event.waitUntil(self.registration.showNotification(title, options))
 })
 
-self.addEventListener('notificationclick', (event) => {
+self.addEventListener('notificationclick', /* クリックされた通知を閉じ、同じアプリの既存画面を前面へ出すか、新しい画面を開く。 */ (event) => {
   event.notification.close()
   const target = new URL(event.notification.data?.url ?? '/', self.location.origin)
   const url = target.origin === self.location.origin ? target.href : self.location.origin
 
   event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
-      const existing = clients.find((client) => client.url.startsWith(self.location.origin))
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(/* 既存のアプリ画面を探して前面へ出し、なければ同じオリジン内の画面を新しく開く。 */ (clients) => {
+      const existing = clients.find(/* 同じオリジンで開いているアプリ画面を探し、通知クリック時に再利用できるようにする。 */ (client) => client.url.startsWith(self.location.origin))
       if (existing) return existing.focus()
       return self.clients.openWindow(url)
     }),

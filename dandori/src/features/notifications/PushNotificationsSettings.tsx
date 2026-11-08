@@ -11,6 +11,7 @@ import {
 
 const FIELD = 'min-h-11 w-full rounded-lg border border-border bg-surface-2 px-3 text-base'
 
+/** 安全な接続で、通知・Service Worker・Push APIが利用可能かを判定する。 */
 function isPushSupported(): boolean {
   return (
     window.isSecureContext &&
@@ -20,6 +21,7 @@ function isPushSupported(): boolean {
   )
 }
 
+/** iPhoneやiPadでホーム画面から起動していない場合を検出し、通知許可の前にインストール案内が必要かを返す。 */
 function needsHomeScreenInstall(): boolean {
   const isAppleMobile =
     /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
@@ -30,6 +32,7 @@ function needsHomeScreenInstall(): boolean {
   return isAppleMobile && !isStandalone
 }
 
+/** 通知サーバーの準備状況とブラウザーの許可状態を表示し、購読登録・停止・テスト通知を操作できるようにする。 */
 export function PushNotificationsSettings() {
   const [supported, setSupported] = useState(false)
   const [serverReady, setServerReady] = useState(false)
@@ -40,8 +43,9 @@ export function PushNotificationsSettings() {
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
+  useEffect(/* 設定画面の表示時に通知の対応状況・公開鍵・既存購読を確認し、画面が閉じた後の不要な更新を防ぐ。 */ () => {
     let cancelled = false
+    /** Push対応と通知許可を確認し、サーバーから公開鍵を取得する。既存の購読と端末トークンから有効状態を判定する。 */
     async function load() {
       const canPush = isPushSupported()
       if (cancelled) return
@@ -69,11 +73,12 @@ export function PushNotificationsSettings() {
       }
     }
     void load()
-    return () => {
+    return /* 登録したイベント監視や待機中のタイマーを解除し、画面破棄後に処理が残らないようにする。 */ () => {
       cancelled = true
     }
   }, [])
 
+  /** ボタン操作を起点に通知許可を求め、Push購読をサーバーへ登録する。成功後に通知予定の同期を促す。 */
   async function enablePush() {
     setError(null)
     setMessage(null)
@@ -121,6 +126,7 @@ export function PushNotificationsSettings() {
     }
   }
 
+  /** サーバーの購読と予定を削除し、ブラウザーの購読解除と端末トークンの削除を行う。 */
   async function disablePush() {
     setBusy(true)
     setError(null)
@@ -142,6 +148,7 @@ export function PushNotificationsSettings() {
     }
   }
 
+  /** この端末へのテスト通知をサーバーに依頼し、送信結果や失敗理由を設定画面に表示する。 */
   async function sendTest() {
     setBusy(true)
     setError(null)
@@ -177,10 +184,10 @@ export function PushNotificationsSettings() {
       <div className="flex flex-wrap gap-2">
         {enabled ? (
           <>
-            <button type="button" disabled={busy} onClick={() => void sendTest()} className={FIELD}>
+            <button type="button" disabled={busy} onClick={/* この端末へのテスト通知の送信を開始する。 */ () => void sendTest()} className={FIELD}>
               テスト通知を送る
             </button>
-            <button type="button" disabled={busy} onClick={() => void disablePush()} className="min-h-11 rounded-lg border border-border px-3 text-sm disabled:opacity-40">
+            <button type="button" disabled={busy} onClick={/* この端末のPush購読と通知予定を解除する。 */ () => void disablePush()} className="min-h-11 rounded-lg border border-border px-3 text-sm disabled:opacity-40">
               通知を停止
             </button>
           </>
@@ -188,7 +195,7 @@ export function PushNotificationsSettings() {
           <button
             type="button"
             disabled={busy || !supported || !serverReady || permission === 'denied'}
-            onClick={() => void enablePush()}
+            onClick={/* 通知許可の確認と、この端末のPush購読登録を開始する。 */ () => void enablePush()}
             className="min-h-11 rounded-lg bg-accent px-4 text-sm font-semibold text-accent-text disabled:opacity-40"
           >
             {busy ? '設定中…' : 'PWA通知を有効にする'}

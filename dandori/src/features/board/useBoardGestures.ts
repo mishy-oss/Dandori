@@ -56,7 +56,7 @@ interface Session {
 // 縦スクロールはブラウザに任せ(touch-action: pan-y)、長押し成立後だけ touchmove を止める
 export function useBoardGestures(options: Options) {
   const optionsRef = useRef(options)
-  useEffect(() => {
+  useEffect(/* イベント処理から最新のオプションを参照できるよう、描画ごとにrefの内容を更新する。 */ () => {
     optionsRef.current = options
   })
 
@@ -70,25 +70,27 @@ export function useBoardGestures(options: Options) {
   const gestured = useRef(false)
   const teardown = useRef<(() => void) | null>(null)
 
-  useEffect(() => {
+  useEffect(/* 操作領域にタッチ移動の監視を登録し、ドラッグ中だけ標準スクロールを止める。画面から外れるときは監視を解除する。 */ () => {
     const list = options.listRef.current
     if (!list) return
+    /** ドラッグ中だけタッチによる標準スクロールを抑止し、予定やカードの操作と競合しないようにする。 */
     const onTouchMove = (e: TouchEvent) => {
       if (blockScroll.current && e.cancelable) e.preventDefault()
     }
     list.addEventListener('touchmove', onTouchMove, { passive: false })
-    return () => list.removeEventListener('touchmove', onTouchMove)
+    return /* 登録したイベント監視や待機中のタイマーを解除し、画面破棄後に処理が残らないようにする。 */ () => list.removeEventListener('touchmove', onTouchMove)
     // listRef は安定した ref なので初回のみ登録する
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  useEffect(() => () => teardown.current?.(), [])
+  useEffect(/* 画面から外れるときに、操作中のジェスチャーのタイマーとイベント監視を解除する処理を登録する。 */ () => /* 画面から外れるときに、操作中のジェスチャーのイベント監視を解除する。 */ () => teardown.current?.(), [])
 
+  /** 表示中のカードの中央座標を測り、ドラッグ対象を除外してドロップ先の挿入位置を計算する。 */
   const measureDropIndex = useCallback((issueId: string, y: number) => {
     const list = optionsRef.current.listRef.current
     if (!list) return 0
     const mids: number[] = []
-    list.querySelectorAll<HTMLElement>('[data-card-id]').forEach((el) => {
+    list.querySelectorAll<HTMLElement>('[data-card-id]').forEach(/* ドラッグ対象を除くカードの中央Y座標を測り、挿入位置の判定用に集める。 */ (el) => {
       if (el.dataset.cardId === issueId) return
       const r = el.getBoundingClientRect()
       mids.push(r.top + r.height / 2)
@@ -96,6 +98,7 @@ export function useBoardGestures(options: Options) {
     return computeDropIndex(mids, y)
   }, [])
 
+  /** 操作対象と開始座標を記録し、長押しまたはリサイズ用のイベント監視を開始する。 */
   const onPointerDown = useCallback(
     (e: ReactPointerEvent) => {
       if (session.current) return
@@ -124,6 +127,7 @@ export function useBoardGestures(options: Options) {
       session.current = s
       gestured.current = false
 
+      /** 操作用タイマー・描画予約・イベント監視を解除し、スクロール制限と操作状態をリセットする。 */
       function finish(resetClickFlag = true) {
         if (s.timer !== null) clearTimeout(s.timer)
         if (s.raf !== null) cancelAnimationFrame(s.raf)
@@ -133,9 +137,10 @@ export function useBoardGestures(options: Options) {
         blockScroll.current = false
         session.current = null
         teardown.current = null
-        if (resetClickFlag) setTimeout(() => (gestured.current = false), 0)
+        if (resetClickFlag) setTimeout(/* 直後のクリック判定が済んだ後でジェスチャーフラグを解除し、次の通常タップを受け付ける。 */ () => (gestured.current = false), 0)
       }
 
+      /** ドラッグ中に端で自動スクロールし、左右端に一定時間とどまったら列を切り替える。挿入位置を再計算して次の描画を予約する。 */
       function tick() {
         if (session.current !== s || s.mode !== 'drag') return
         const { listRef, activeIndex, columnCount, onSwitchColumn } = optionsRef.current
@@ -167,6 +172,7 @@ export function useBoardGestures(options: Options) {
         s.raf = requestAnimationFrame(tick)
       }
 
+      /** 長押しが成立したカードをドラッグ状態へ切り替え、つかんだ位置・寸法・初期挿入位置を記録する。 */
       function startDrag() {
         s.timer = null
         if (session.current !== s || s.mode !== 'pending') return
@@ -176,7 +182,7 @@ export function useBoardGestures(options: Options) {
         const r = s.el.getBoundingClientRect()
         const list = optionsRef.current.listRef.current
         const cards = list ? [...list.querySelectorAll<HTMLElement>('[data-card-id]')] : []
-        const idx = cards.filter((c) => c !== s.el).filter((c) => c.compareDocumentPosition(s.el) & Node.DOCUMENT_POSITION_FOLLOWING).length
+        const idx = cards.filter(/* 並べ替えの位置を数える対象から、ドラッグ中のカード自身を除外する。 */ (c) => c !== s.el).filter(/* ドラッグ対象より前に表示されているカードだけを数え、開始時点の挿入位置を求める。 */ (c) => c.compareDocumentPosition(s.el) & Node.DOCUMENT_POSITION_FOLLOWING).length
         dropIndexRef.current = idx
         setDropIndex(idx)
         setDrag({
@@ -191,6 +197,7 @@ export function useBoardGestures(options: Options) {
         s.raf = requestAnimationFrame(tick)
       }
 
+      /** 指やマウスの移動を追跡し、縦スクロールと横スワイプを判別して、ドラッグやスワイプの表示状態を更新する。 */
       function onMove(ev: PointerEvent) {
         if (ev.pointerId !== s.pointerId) return
         s.x = ev.clientX
@@ -221,10 +228,11 @@ export function useBoardGestures(options: Options) {
           const shown = Math.max(-MAX_SWIPE_PX, Math.min(MAX_SWIPE_PX, blocked ? dx * 0.2 : dx))
           setSwipe({ issueId: s.issueId, dx: shown, active: true })
         } else if (s.mode === 'drag') {
-          setDrag((d) => (d ? { ...d, x: s.x, y: s.y } : d))
+          setDrag(/* ドラッグ状態が存在する場合だけ、直前の状態を引き継いでポインター座標を更新する。 */ (d) => (d ? { ...d, x: s.x, y: s.y } : d))
         }
       }
 
+      /** ドラッグの挿入先またはスワイプの移動先を確定する。スワイプは退出アニメーションの完了後に移動処理を呼ぶ。 */
       function onUp(ev: PointerEvent) {
         if (ev.pointerId !== s.pointerId) return
         const { activeIndex, columnCount, onSwipeMove, onDrop } = optionsRef.current
@@ -243,7 +251,7 @@ export function useBoardGestures(options: Options) {
             setSwipe(null)
           } else {
             setSwipe({ issueId, dx: dx < 0 ? -window.innerWidth : window.innerWidth, active: false })
-            setTimeout(() => {
+            setTimeout(/* スワイプの退出アニメーションが終わってから表示を消し、移動先列への保存を呼び出す。 */ () => {
               setSwipe(null)
               onSwipeMove(issueId, target)
             }, LEAVE_MS)
@@ -251,6 +259,7 @@ export function useBoardGestures(options: Options) {
         }
       }
 
+      /** 操作中のポインターが取り消されたら、監視とタイマーを止めてドラッグ・スワイプ表示を消す。 */
       function onCancel(ev: PointerEvent) {
         if (ev.pointerId !== s.pointerId) return
         finish()
@@ -258,7 +267,7 @@ export function useBoardGestures(options: Options) {
         setSwipe(null)
       }
 
-      teardown.current = () => finish(false)
+      teardown.current = /* 画面破棄時に現在のジェスチャーのタイマーとイベント監視を解除する。 */ () => finish(false)
       window.addEventListener('pointermove', onMove)
       window.addEventListener('pointerup', onUp)
       window.addEventListener('pointercancel', onCancel)
@@ -267,6 +276,7 @@ export function useBoardGestures(options: Options) {
     [measureDropIndex],
   )
 
+  /** 直前の操作がドラッグやスワイプだったかを返し、操作直後の誤った編集画面の表示を防ぐ。 */
   const shouldSuppressClick = useCallback(() => gestured.current, [])
 
   return { drag, dropIndex, swipe, onPointerDown, shouldSuppressClick }
