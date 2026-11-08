@@ -16,5 +16,14 @@
   },
   "assets": {
     "not_found_handling": "single-page-application"
+  },
+  // 作業ブランチのプレビューでも通知予定の保存先を利用する。
+  // script_name を指定せず、各プレビュー専用の領域を自動作成する。
+  "previews": {
+    "durable_objects": {
+      "bindings": [
+        { "name": "PUSH_DEVICES", "class_name": "PushDevice" }
+      ]
+    }
   }
 }
