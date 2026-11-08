@@ -64,7 +64,7 @@ export interface Issue {
   deletedAt: number | null
 }
 
-export type RecurrenceFrequency = 'daily' | 'weekly'
+export type RecurrenceFrequency = 'daily' | 'weekly' | 'monthly'
 
 export interface RecurrenceRule {
   id: ID

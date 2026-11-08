@@ -220,6 +220,7 @@ export function IssueEditor({
                   <option value="">繰り返さない</option>
                   <option value="daily">毎日</option>
                   <option value="weekly">毎週</option>
+                  <option value="monthly">毎月</option>
                 </select>
               </label>
               {recurrence && (
@@ -235,7 +236,7 @@ export function IssueEditor({
                       value={recurrenceInterval}
                       onChange={/* 入力された値に合わせて繰り返し間隔を更新する。 */ (e) => setRecurrenceInterval(e.target.value)}
                     />
-                    <span>{recurrence === 'daily' ? '日' : '週'}</span>
+                    <span>{recurrence === 'daily' ? '日' : recurrence === 'weekly' ? '週' : 'か月'}</span>
                   </span>
                 </label>
               )}
@@ -281,6 +282,9 @@ export function IssueEditor({
             </div>
             {recurrence && (
               <p className="text-xs text-muted">このタスクを完了すると、次回分をバックログに作成します。</p>
+            )}
+            {recurrence === 'monthly' && (
+              <p className="text-xs text-muted">開始日と同じ日にちで繰り返します。その日がない月は月末になります。</p>
             )}
             {issue && recurrenceRule?.active && (
               <button

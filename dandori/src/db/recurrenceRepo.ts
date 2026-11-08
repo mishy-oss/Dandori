@@ -5,11 +5,11 @@ import { newId } from '../lib/id'
 import { getProject, getWorkflow } from './projectRepo'
 import { rankAfter } from '../lib/rank'
 
-/** 曜日指定があればその曜日と週の間隔に従い、それ以外は日・週の間隔に従って次回の日付を返す。 */
+/** 曜日指定の毎週、または日・週・月の間隔で次回日を求める。毎月の日にちはルールの開始日を基準にする。 */
 function nextDate(rule: RecurrenceRule, date: string): string {
   return rule.frequency === 'weekly' && rule.weekdays?.length
     ? nextWeeklyRecurrenceDate(date, rule.weekdays, rule.interval, rule.startDate)
-    : nextRecurrenceDate(date, rule.frequency, rule.interval)
+    : nextRecurrenceDate(date, rule.frequency, rule.interval, rule.startDate)
 }
 
 /** Materialize this recurring task's remaining occurrences within its sprint. */
