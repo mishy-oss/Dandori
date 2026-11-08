@@ -6,9 +6,11 @@ import type { Issue, RecurrenceRule, WorkflowStatus } from '../../db/types'
 import { formatIssueNumber } from '../../lib/issueNumber'
 import { formatMin } from '../timeline/timelineLogic'
 import type { BoardIssueGroup } from './recurringGroups'
+import { TaskRelations } from './TaskRelations'
 
 interface Props {
   group: BoardIssueGroup
+  relatedIssues?: Issue[]
   rule?: RecurrenceRule
   statuses: WorkflowStatus[]
   doneIds: Set<string>
@@ -33,7 +35,7 @@ function frequencyLabel(rule?: RecurrenceRule): string {
 }
 
 /** 本文クリックで代表回を編集し、三角ボタンで繰り返し一覧を展開する。各回の編集・完了・ステータス変更も個別に受け付ける。 */
-export function RecurringBoardCard({ group, rule, statuses, doneIds, pulse, onOpen, onToggleDone, onChangeStatus }: Props) {
+export function RecurringBoardCard({ group, relatedIssues = [], rule, statuses, doneIds, pulse, onOpen, onToggleDone, onChangeStatus }: Props) {
   const [expanded, setExpanded] = useState(false)
   const [busy, setBusy] = useState(false)
   const detailsId = useId()
@@ -57,6 +59,7 @@ export function RecurringBoardCard({ group, rule, statuses, doneIds, pulse, onOp
         <span className="min-w-0 flex-1">
           <span className="mb-1 block text-[10px] font-medium text-muted">↻ {frequencyLabel(rule)} · {group.occurrences.length}回分</span>
           <span className="block truncate text-sm font-semibold">{group.issue.title}</span>
+          <TaskRelations issue={group.issue} issues={relatedIssues} doneIds={doneIds} />
           <span className="mt-1 block text-[11px] text-muted">完了 {doneCount}/{group.occurrences.length}{!allDone && ` · 次の未完了 ${occurrenceLabel(group.issue)}`}</span>
         </span>
       </button>
@@ -85,6 +88,7 @@ export function RecurringBoardCard({ group, rule, statuses, doneIds, pulse, onOp
               <button type="button" className="min-h-11 min-w-0 flex-1 text-left" onClick={/* 選択した回の編集画面を開く。 */ () => onOpen(issue)}>
                 <span className={`block text-xs font-medium ${done ? 'text-muted line-through' : ''}`}>{occurrenceLabel(issue)}</span>
                 <span className="block truncate text-[10px] text-muted">{formatIssueNumber(issue.number)}{issue.title !== group.issue.title && ` · ${issue.title}`}</span>
+                <TaskRelations issue={issue} issues={relatedIssues} doneIds={doneIds} />
               </button>
               <select aria-label={`${occurrenceLabel(issue)}のステータス`} value={issue.statusId} disabled={busy}
                 className="min-h-11 max-w-[40%] rounded-lg border border-border bg-surface-2 px-2 text-[11px] disabled:opacity-40"

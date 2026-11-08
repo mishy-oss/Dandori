@@ -2,6 +2,7 @@ import type { CSSProperties } from 'react'
 import { DoneCheckButton } from '../../app/DoneCheckButton'
 import type { Issue, Priority } from '../../db/types'
 import { formatIssueNumber } from '../../lib/issueNumber'
+import { TaskRelations } from './TaskRelations'
 
 const PRIORITY_COLOR: Record<Priority, string> = {
   urgent: '#ef4444',
@@ -21,6 +22,8 @@ interface Props {
   nextLabel?: string
   onOpen: () => void
   onToggleDone: () => void
+  relatedIssues?: Issue[]
+  doneIds?: Set<string>
 }
 
 /** Issueをボードのカードとして表示する。スワイプ位置、ドラッグ時の浮いた表示、完了状態を反映する。 */
@@ -35,6 +38,8 @@ export function BoardCard({
   nextLabel,
   onOpen,
   onToggleDone,
+  relatedIssues = [],
+  doneIds = new Set(),
 }: Props) {
   const card = (
     <div
@@ -67,6 +72,7 @@ export function BoardCard({
           {issue.dueDate ? ` · 期限 ${issue.dueDate}` : ''}
         </span>
         <span className={done ? 'line-through opacity-60' : ''}>{issue.title}</span>
+        <TaskRelations issue={issue} issues={relatedIssues} doneIds={doneIds} />
       </div>
     </div>
   )

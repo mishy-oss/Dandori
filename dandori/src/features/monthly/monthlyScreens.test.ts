@@ -5,6 +5,7 @@ import { useDataStore } from '../../store/data'
 import { BoardScreen } from '../board/BoardScreen'
 import { BacklogScreen } from '../backlog/BacklogScreen'
 import { IssueEditor } from '../issue-editor/IssueEditor'
+import type { Issue } from '../../db/types'
 
 vi.mock('../../store/data', /* サーバー描画では初期状態が使われるため、フックの読み取りだけをテストの現在状態へ差し替える。 */ async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../store/data')>()
@@ -41,4 +42,53 @@ it('creates tasks for a month instead of a sprint', /* 新規タスク作成画�
   expect(html).toContain('type="month"')
   expect(html).toContain('2027-01')
   expect(html).not.toContain('スプリント')
+})
+
+/** 両画面で同じ繰り返しを表示するための、月付きタスクを用意する。 */
+function recurringTask(id: string, patch: Partial<Issue> = {}): Issue {
+  return {
+    id, projectId: 'project', number: 1, title: '日課', type: 'task', priority: 'medium', statusId: 'todo',
+    parentId: null, labels: [], dueDate: null, estimateMin: null, sprintId: null, planningMonth: '2027-01', rank: id,
+    date: '2027-01-01', startMin: null, durationMin: 30, icon: '', color: '#38bdf8', reminderOffsetMin: null,
+    recurrenceId: 'daily', assigneeId: null, completedAt: null, createdAt: 0, updatedAt: 0, deletedAt: null, ...patch,
+  }
+}
+
+/** 月をまたぐ親の名前と子の進捗をボードへ表示し、編集画面に関連タスクを開く操作を用意する。 */
+it('shows parent links, child progress and related editing controls', () => {
+  const parent = recurringTask('parent', { recurrenceId: null, title: '親の作業' })
+  const child = recurringTask('child', { recurrenceId: null, parentId: parent.id, title: '子の作業' })
+  const completed = recurringTask('completed', { recurrenceId: null, parentId: parent.id, title: '完了した子', statusId: 'done', planningMonth: '2026-12' })
+  useDataStore.setState({ issues: [parent, child, completed] })
+  const board = renderToStaticMarkup(createElement(BoardScreen))
+  expect(board).toContain('子タスク 1/2 完了')
+  expect(board).toContain('親: ')
+  expect(board).toContain('親の作業')
+  const parentEditor = renderToStaticMarkup(createElement(IssueEditor, { issue: parent, onClose: () => {} }))
+  expect(parentEditor).toContain('aria-label="子の作業を編集"')
+  expect(parentEditor).toContain('aria-label="完了した子を編集"')
+  expect(parentEditor).toContain('親のステータスは子タスクの進捗に連動します')
+  const childEditor = renderToStaticMarkup(createElement(IssueEditor, { issue: child, onClose: () => {} }))
+  expect(childEditor).toContain('親タスクを編集')
+})
+
+it('uses the same recurring cards in the task tab and board', /* タスク側も同じルールの回だけをまとめ、編集・展開ボタンと完了数を表示することを確認する。 */ () => {
+  useDataStore.setState({ issues: [
+    recurringTask('a', { statusId: 'done' }),
+    recurringTask('b', { number: 2, date: '2027-01-02' }),
+    recurringTask('c', { number: 3, recurrenceId: 'another', date: '2027-01-03' }),
+    recurringTask('d', { number: 4, recurrenceId: null, title: '通常タスク' }),
+    recurringTask('e', { number: 5, planningMonth: '2027-02', date: '2027-02-01', title: '翌月だけのタスク' }),
+  ] })
+  for (const Screen of [BoardScreen, BacklogScreen]) {
+    const html = renderToStaticMarkup(createElement(Screen))
+    expect(html.match(/aria-label="日課の繰り返し"/g)).toHaveLength(2)
+    expect(html.match(/aria-label="日課を編集"/g)).toHaveLength(2)
+    expect(html.match(/aria-label="日課の繰り返し一覧を開く"/g)).toHaveLength(2)
+    expect(html).toContain('完了 1/2')
+    expect(html).toContain('通常タスク')
+    expect(html).not.toContain('翌月だけのタスク')
+  }
+  const tasks = renderToStaticMarkup(createElement(BacklogScreen))
+  expect(tasks).toContain('3件表示 / 4タスク')
 })

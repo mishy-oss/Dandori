@@ -12,6 +12,7 @@ import { WeekStrip } from './WeekStrip'
 import { PX_PER_MIN, clampMove, nowMin, visibleRange, weekDays } from './timelineLogic'
 import { useNow } from './useNow'
 import { useTimelineGestures } from './useTimelineGestures'
+import { Icon } from '../../app/Icon'
 
 type EditorState = { issue: Issue } | { create: { startMin: number | null } } | null
 
@@ -30,6 +31,7 @@ export function TimelineScreen() {
   const today = todayStr(now)
   /** 初回表示時点の選択日を計算する。 */
   const [selected, setSelected] = useState(() => todayStr())
+  const [todayJump, setTodayJump] = useState(0)
   const [editor, setEditor] = useState<EditorState>(null)
   const [error, setError] = useState<string | null>(null)
   useEffect(/* 選択日の月に必要な繰り返し予定を用意する。 */ () => {
@@ -57,13 +59,20 @@ export function TimelineScreen() {
   )
   /** 選択日の予定がすべて見えるよう、設定と配置時刻からタイムラインの表示範囲を計算する。 */
   const range = useMemo(
-    () =>
-      visibleRange(
+    () => {
+      const visible = visibleRange(
         settings.dayStartHour,
         settings.dayEndHour,
         scheduled.map(/* 予定の重なりや表示範囲の計算に使うID・開始時刻・所要時間を取り出す。 */ (i) => ({ id: i.id, startMin: i.startMin!, durationMin: i.durationMin })),
-      ),
-    [settings.dayStartHour, settings.dayEndHour, scheduled],
+      )
+      // 今日へのジャンプ時は、現在時刻が設定の時間帯の外でも表示できるようにする。
+      if (todayJump > 0 && selected === todayStr()) {
+        const minute = nowMin()
+        return { startMin: Math.min(visible.startMin, Math.floor(minute / 60) * 60), endMin: Math.max(visible.endMin, Math.ceil((minute + 1) / 60) * 60) }
+      }
+      return visible
+    },
+    [settings.dayStartHour, settings.dayEndHour, scheduled, selected, todayJump],
   )
   const days = weekDays(selected, settings.weekStartsOn)
   /** 時刻が指定されている日付を集め、週表示で予定のある日に印を付けられるようにする。 */
@@ -112,12 +121,19 @@ export function TimelineScreen() {
 
   // 日付を切り替えたとき(今日なら現在時刻の少し前、それ以外は先頭)へスクロールする
   const rangeStart = range.startMin
+  /** 今日へ日付を戻し、すでに今日を表示中でも現在時刻へのスクロールを再実行する。 */
+  function jumpToToday() {
+    setSelected(todayStr())
+    setTodayJump(/* 同じ日付の再選択でもスクロールを要求する。 */ (count) => count + 1)
+  }
+
   useEffect(/* 日付切替後にスクロール位置を合わせる。今日なら現在時刻の少し前、他の日なら時間軸の先頭を表示する。 */ () => {
     const scroller = scrollerRef.current
     if (!scroller || !ready) return
-    const target = selected === todayStr() ? Math.max(rangeStart, nowMin() - 60) : rangeStart
+    const leadMinutes = Math.min(60, scroller.clientHeight / (PX_PER_MIN * 3))
+    const target = selected === todayStr() ? Math.max(rangeStart, nowMin() - leadMinutes) : rangeStart
     scroller.scrollTop = (target - rangeStart) * PX_PER_MIN
-  }, [selected, ready, rangeStart])
+  }, [selected, ready, rangeStart, todayJump])
 
   if (!ready || !project) return null
 
@@ -130,14 +146,12 @@ export function TimelineScreen() {
         <h1 className="flex-1 text-[25px] font-semibold tracking-[-0.04em]">
           {title}<span className="ml-2 font-medium text-accent">{format(parseISO(selected), 'yyyy')}</span>
         </h1>
-        {selected !== today && (
-          <button
-            onClick={/* 操作内容に合わせて選択日を更新する。 */ () => setSelected(todayStr())}
-            className="min-h-11 rounded-full px-3 text-xs font-medium text-accent"
-          >
-            今日
-          </button>
-        )}
+        <button type="button" data-no-drag aria-label="今日へジャンプ" title="今日の現在時刻へ移動"
+          onClick={jumpToToday}
+          className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border border-accent/25 bg-surface px-3 text-xs font-medium text-accent">
+          <Icon name="clock" className="size-4" />
+          今日へ
+        </button>
       </div>
 
       <WeekStrip

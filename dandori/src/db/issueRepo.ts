@@ -42,6 +42,38 @@ export type IssuePatch = Partial<
 
 const DEFAULT_DURATION_MIN = 30
 
+/** 子の進捗から親と祖先の状態を更新する。子がないタスクは手動の状態を保つ。呼び出し元のトランザクションで保存する。 */
+export async function syncParentStatuses(ids: (string | null)[], timestamp: number): Promise<void> {
+  for (const id of ids) {
+    let parentId = id
+    const seen = new Set<string>()
+    while (parentId && !seen.has(parentId)) {
+      seen.add(parentId)
+      const parent = await getIssue(parentId)
+      if (!parent) break
+      const project = await getProject(parent.projectId)
+      const workflow = project && await getWorkflow(project.workflowId)
+      if (!workflow) break
+      const children = await db.issues.where('parentId').equals(parent.id)
+        .filter((child) => child.deletedAt === null && child.projectId === parent.projectId).toArray()
+      if (children.length) {
+        const categories = children.map((child) => workflow.statuses.find((s) => s.id === child.statusId)?.category)
+        const category = categories.every((value) => value === 'done') ? 'done'
+          : categories.some((value) => value === 'doing' || value === 'done') ? 'doing' : 'todo'
+        const target = workflow.statuses.find((status) => status.category === category)
+        const currentCategory = workflow.statuses.find((status) => status.id === parent.statusId)?.category
+        if (target && currentCategory !== category) {
+          await db.issues.update(parent.id, {
+            statusId: target.id, completedAt: category === 'done' ? timestamp : null,
+            rank: await nextRankInStatus(parent.projectId, target.id), updatedAt: timestamp,
+          })
+        }
+      }
+      parentId = parent.parentId
+    }
+  }
+}
+
 /** 削除されていないIssueのうち、指定したステータスに属するものを取り出す。 */
 function activeInStatus(issues: Issue[], statusId: string): Issue[] {
   return issues.filter(/* 未削除・指定ステータスと一致という条件を満たす要素だけを残す。 */ (i) => i.deletedAt === null && i.statusId === statusId)
@@ -142,11 +174,16 @@ export async function createIssue(input: CreateIssueInput): Promise<Issue> {
       if (sprint.state === 'closed') throw new Error('完了したスプリントには追加できません')
     }
 
-    const statusId =
+    let statusId =
       input.statusId ??
       workflow.statuses.find(/* 未着手カテゴリという条件を最初に満たす要素を探す。 */ (s) => s.category === 'todo')!.id
     const status = workflow.statuses.find(/* 指定IDと一致という条件を最初に満たす要素を探す。 */ (s) => s.id === statusId)
     if (!status) throw new Error('ステータスが見つかりません')
+
+    // 日付と開始時刻を指定して作る未着手タスクは、予定に配置した状態として扱う。
+    if (input.date != null && input.startMin != null && status.category === 'todo') {
+      statusId = workflow.statuses.find((s) => s.category === 'doing')?.id ?? statusId
+    }
 
     if (input.parentId) await validateParent(project.id, input.parentId)
 
@@ -207,6 +244,7 @@ export async function createIssue(input: CreateIssueInput): Promise<Issue> {
       if (sprint) await expandRecurrenceInSprint(issue, sprint, t)
     }
     if (recurrenceRule && issue.planningMonth && !issue.sprintId) await expandRecurrenceInMonth(issue, issue.planningMonth, t)
+    await syncParentStatuses([issue.parentId], t)
     return issue
     },
   )
@@ -269,12 +307,28 @@ export async function updateIssue(
       }
     }
 
-    // ステータスとスケジュールは独立。ステータス変更時は完了日時と列内の並びだけ更新する
-    let transitionedToDone = false
-    if (issuePatch.statusId !== undefined && issuePatch.statusId !== current.statusId) {
+    // 予定への追加は進行中、未配置への変更は未着手にする。完了済みは保持する。
+    const newlyScheduled = (current.date === null || current.startMin === null)
+      && next.date !== null && next.startMin !== null
+    const clearedSchedule = (issuePatch.date === null || issuePatch.startMin === null)
+      && (next.date === null || next.startMin === null)
+    if (newlyScheduled || clearedSchedule) {
       const project = await getProject(current.projectId)
       const workflow = project && (await getWorkflow(project.workflowId))
-      const status = workflow?.statuses.find(/* 指定IDと一致という条件を最初に満たす要素を探す。 */ (s) => s.id === issuePatch.statusId)
+      const status = workflow?.statuses.find((s) => s.id === next.statusId)
+      if (status?.category === 'todo') {
+        if (newlyScheduled) next.statusId = workflow?.statuses.find((s) => s.category === 'doing')?.id ?? next.statusId
+      }
+      if (clearedSchedule && status && status.category !== 'done') {
+        next.statusId = workflow?.statuses.find((s) => s.category === 'todo')?.id ?? next.statusId
+      }
+    }
+
+    let transitionedToDone = false
+    if (next.statusId !== current.statusId) {
+      const project = await getProject(current.projectId)
+      const workflow = project && (await getWorkflow(project.workflowId))
+      const status = workflow?.statuses.find(/* 保存するステータスをワークフローから取得する。 */ (s) => s.id === next.statusId)
       if (!status) throw new Error('ステータスが見つかりません')
       const previousStatus = workflow?.statuses.find(/* 指定IDと一致という条件を最初に満たす要素を探す。 */ (s) => s.id === current.statusId)
       transitionedToDone = status.category === 'done' && previousStatus?.category !== 'done'
@@ -290,8 +344,15 @@ export async function updateIssue(
     if (next.planningMonth && !next.sprintId && next.recurrenceId && (recurrencePatch !== undefined || issuePatch.planningMonth !== undefined)) {
       await expandRecurrenceInMonth(next, next.planningMonth, t)
     }
-    if (transitionedToDone) await createNextOccurrence(next, t)
-    return next
+    await syncParentStatuses([next.id], t)
+    const saved = (await getIssue(next.id))!
+    const project = await getProject(saved.projectId)
+    const workflow = project && await getWorkflow(project.workflowId)
+    if (transitionedToDone && workflow?.statuses.some((status) => status.id === saved.statusId && status.category === 'done')) {
+      await createNextOccurrence(saved, t)
+    }
+    await syncParentStatuses([current.parentId, next.id], t)
+    return (await getIssue(next.id))!
   })
 }
 
@@ -410,8 +471,11 @@ export async function moveIssue(
       updatedAt: t,
     }
     await db.issues.put(moved)
-    if (status.category === 'done' && previousStatus?.category !== 'done') await createNextOccurrence(moved, t)
-    return moved
+    await syncParentStatuses([moved.id], t)
+    const saved = (await getIssue(moved.id))!
+    if (status.category === 'done' && previousStatus?.category !== 'done' && saved.statusId === status.id) await createNextOccurrence(saved, t)
+    await syncParentStatuses([moved.id], t)
+    return (await getIssue(moved.id))!
   })
 }
 
@@ -438,5 +502,6 @@ export async function deleteIssue(id: string): Promise<void> {
       .anyOf([...toDelete])
       .filter(/* 未削除という条件を満たす要素だけを残す。 */ (i) => i.deletedAt === null)
       .modify({ deletedAt: t, updatedAt: t })
+    await syncParentStatuses([current?.parentId ?? null], t)
   })
 }
