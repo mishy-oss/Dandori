@@ -30,7 +30,7 @@ describe('project / workflow', /* 「project / workflow」に関するテスト�
     expect(p.nextNumber).toBe(1)
     const w = await getWorkflow(p.workflowId)
     expect(w?.statuses.map(/* 各要素からステータスのカテゴリだけを取り出す。 */ (s) => s.category)).toEqual(['todo', 'doing', 'routine', 'done'])
-    expect(w?.statuses[1].wipLimit).toBe(3)
+    expect(w?.statuses[1].wipLimit).toBeUndefined()
   })
 
   it('rejects invalid or duplicate keys and empty names', /* 形式が不正なキー、使用中のキー、空の名前を拒否することを検証する。 */ async () => {

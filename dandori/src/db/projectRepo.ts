@@ -11,7 +11,7 @@ export const DEFAULT_PROJECT = { key: 'TASK', name: 'Dandori' } as const
 export function createDefaultStatuses(): WorkflowStatus[] {
   return [
     { id: newId(), name: 'To Do', category: 'todo' },
-    { id: newId(), name: 'In Progress', category: 'doing', wipLimit: 3 },
+    { id: newId(), name: 'In Progress', category: 'doing' },
     { id: newId(), name: 'Recurring', category: 'routine' },
     { id: newId(), name: 'Done', category: 'done' },
   ]
