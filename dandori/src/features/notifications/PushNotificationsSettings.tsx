@@ -202,7 +202,7 @@ export function PushNotificationsSettings() {
           </button>
         )}
       </div>
-      {message && <p role="status" className="mt-3 text-sm text-accent">{message}</p>}
+      {message && <p role="のステータス" className="mt-3 text-sm text-accent">{message}</p>}
       {error && <p role="alert" className="mt-3 text-sm text-red-400">{error}</p>}
     </section>
   )

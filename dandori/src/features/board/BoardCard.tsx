@@ -6,6 +6,7 @@ import { TaskRelations } from './TaskRelations'
 
 const PRIORITY_COLOR: Record<Priority, string> = {
   urgent: '#ef4444',
+  highest: '#e85d75',
   high: '#f97316',
   medium: '#38bdf8',
   low: '#94a3b8',

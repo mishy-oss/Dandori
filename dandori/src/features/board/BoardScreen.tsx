@@ -126,7 +126,7 @@ export function BoardScreen() {
   return (
     <section className="flex min-h-full flex-col gap-3 p-4">
       <div>
-        <h1 className="text-2xl font-bold">Board</h1>
+        <h1 className="text-2xl font-bold">ボード</h1>
         <p className="text-sm text-muted">
           月ごとのタスクをステータス別に管理します
         </p>
@@ -166,8 +166,8 @@ export function BoardScreen() {
       </div>
 
       {wip.over && (
-        <p role="status" className="rounded-lg border border-amber-500 bg-amber-500/10 p-3 text-sm">
-          ⚠ WIP上限({active.wipLimit}件)を超えています(実タスク{actualCount}件)。ブロックはしません
+        <p role="のステータス" className="rounded-lg border border-amber-500 bg-amber-500/10 p-3 text-sm">
+          ⚠ WIP上限({active.wipLimit}件)を超えています(実タスク{actualCount} tasks). You can still add tasks.
         </p>
       )}
       {error && (

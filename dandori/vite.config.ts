@@ -41,7 +41,7 @@ export default defineConfig({
       manifest: {
         name: 'Dandori',
         short_name: 'Dandori',
-        description: '個人用スプリント管理 + 時間軸タイムライン',
+        description: '個人用タスク管理・月次計画と時間軸タイムライン',
         lang: 'ja',
         display: 'standalone',
         start_url: '/?source=pwa',
