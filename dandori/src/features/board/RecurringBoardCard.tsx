@@ -80,7 +80,7 @@ export function RecurringBoardCard({ group, relatedIssues = [], rule, statuses, 
           {group.occurrences.map(/* 日付順に各回の編集と状態変更の操作を表示する。 */ (issue) => {
             const done = doneIds.has(issue.statusId)
             return <li key={issue.id} className="flex items-center gap-1 py-2">
-              <button type="button" disabled={busy} aria-label={`${occurrenceLabel(issue)}の${issue.title}を${done ? '未完了に戻す' : '完了にする'}`} aria-pressed={done}
+              <button type="button" disabled={busy} aria-label={`${occurrenceLabel(issue)} — ${issue.title} — ${done ? '未完了に戻す' : '完了にする'}`} aria-pressed={done}
                 className="flex size-11 shrink-0 items-center justify-center rounded-full disabled:opacity-40"
                 onClick={/* 選択した回だけ完了状態を切り替える。 */ () => void run(/* 指定回の保存が終わるまで待つ。 */ () => onToggleDone(issue.id))}>
                 <span className={`flex size-5 items-center justify-center rounded-full border ${done ? 'border-accent bg-accent text-accent-text' : 'border-muted'}`}>{done && <Icon name="check" className="size-3" />}</span>
@@ -90,7 +90,7 @@ export function RecurringBoardCard({ group, relatedIssues = [], rule, statuses, 
                 <span className="block truncate text-[10px] text-muted">{formatIssueNumber(issue.number)}{issue.title !== group.issue.title && ` · ${issue.title}`}</span>
                 <TaskRelations issue={issue} issues={relatedIssues} doneIds={doneIds} />
               </button>
-              <select aria-label={`${occurrenceLabel(issue)}のステータス`} value={issue.statusId} disabled={busy}
+              <select aria-label={`${occurrenceLabel(issue)} のステータス`} value={issue.statusId} disabled={busy}
                 className="min-h-11 max-w-[40%] rounded-lg border border-border bg-surface-2 px-2 text-[11px] disabled:opacity-40"
                 onChange={/* この回のステータスだけ変更する。 */ (event) => { const statusId = event.target.value; void run(/* 選択されたステータスへの保存を待つ。 */ () => onChangeStatus(issue.id, statusId)) }}>
                 {statuses.map(/* 既存ワークフローのステータスを選択肢にする。 */ (status) => <option key={status.id} value={status.id}>{status.name}</option>)}

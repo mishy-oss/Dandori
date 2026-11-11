@@ -25,7 +25,7 @@ export function Screen({
 export function Placeholder({ phase }: { phase: string }) {
   return (
     <p className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted">
-      {phase}で実装予定
+      {phase} is planned for implementation
     </p>
   )
 }

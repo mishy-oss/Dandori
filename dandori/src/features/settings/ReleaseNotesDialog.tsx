@@ -28,7 +28,7 @@ export function ReleaseNotesDialog({ onClose }: { onClose: () => void }) {
       <button type="button" onClick={onClose} className="min-h-11 shrink-0 rounded-lg border border-border px-3 text-sm">閉じる</button>
     </div>
     <p className="mb-3 text-xs text-muted">現在のバージョンまでの最近の変更を最大5件表示します。日付はコミット日（日本時間）です。</p>
-    {notes === null ? <p role="status" className="py-4 text-sm text-muted">読み込み中…</p>
+    {notes === null ? <p role="のステータス" className="py-4 text-sm text-muted">読み込み中…</p>
       : notes === 'error' ? <div role="alert" className="text-sm text-muted">
         <p>リリースノートを取得できませんでした。通信環境を確認し、開き直してください。</p>
       </div> : <>

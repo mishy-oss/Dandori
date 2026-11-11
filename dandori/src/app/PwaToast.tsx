@@ -35,7 +35,7 @@ export function PwaToast() {
 
   return (
     <div
-      role="status"
+      role="のステータス"
       className="fixed inset-x-4 z-50 mx-auto flex max-h-[60dvh] max-w-xl flex-col gap-3 overflow-y-auto rounded-xl border border-border bg-surface p-3 shadow-lg"
       style={{ bottom: 'calc(env(safe-area-inset-bottom) + 72px)' }}
     >
@@ -46,7 +46,7 @@ export function PwaToast() {
       </p>
       {needRefresh && <div className="text-xs text-muted">
         {notes === null ? <p>更新内容を読み込み中…</p> : notes === 'error' ? <p>更新内容を取得できませんでした。アプリの更新はできます。</p> : <>
-          <p className="mb-2 font-medium">{notes.recent ? '最近の変更（コミットメッセージ）' : '更新内容（コミットメッセージ）'}</p>
+          <p className="mb-2 font-medium">最近の更新</p>
           {notes.entries.length > 0 ? <ul className="list-disc space-y-1 pl-4">
             {notes.entries.map((entry) => <li key={entry.sha} className="break-words">
               {entry.date && <time dateTime={entry.date} className="mr-2 text-muted">{formatCommitDate(entry.date)}</time>}
