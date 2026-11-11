@@ -4,13 +4,18 @@ import type { ReactNode } from 'react'
 export function Screen({
   title,
   children,
+  headerAction,
 }: {
   title: string
   children?: ReactNode
+  headerAction?: ReactNode
 }) {
   return (
     <section className="flex flex-col gap-4 p-4">
-      <h1 className="text-2xl font-bold">{title}</h1>
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold">{title}</h1>
+        {headerAction}
+      </div>
       {children}
     </section>
   )

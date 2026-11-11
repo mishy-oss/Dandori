@@ -5,6 +5,7 @@ import { todayStr } from '../../lib/date'
 import { currentMonth, isValidMonth, issueMonth } from '../../lib/month'
 import { selectCurrentProject, useDataStore } from '../../store/data'
 import { formatMin, parseTime } from '../timeline/timelineLogic'
+import { scheduledEditorStatusId } from './issueEditorLogic'
 
 const FIELD =
   'min-h-11 w-full rounded-lg border border-border bg-surface-2 px-3 text-base'
@@ -140,12 +141,13 @@ export function IssueEditor({
       setError('繰り返す曜日を1つ以上選択してください')
       return
     }
+    const scheduleChanged = !issue || issue.date !== (date || null) || issue.startMin !== startMin
     const common = {
       title,
       description: description || undefined,
       type,
       priority,
-      statusId,
+      statusId: scheduledEditorStatusId(workflow?.statuses ?? [], statusId, date || null, startMin, scheduleChanged),
       parentId,
       dueDate: dueDate || null,
       date: date || null,
