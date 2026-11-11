@@ -68,6 +68,19 @@ export class DandoriDB extends Dexie {
         workflow.updatedAt = Date.now()
       })
     })
+    // 既存環境でも進行中のWIP上限を解除する。列のIDやタスクの状態は保持する。
+    this.version(10).stores({}).upgrade(async (transaction) => {
+      await transaction.table<Workflow>('workflows').toCollection().modify((workflow) => {
+        let changed = false
+        for (const status of workflow.statuses) {
+          if (status.category === 'doing' && status.wipLimit !== undefined) {
+            delete status.wipLimit
+            changed = true
+          }
+        }
+        if (changed) workflow.updatedAt = Date.now()
+      })
+    })
   }
 }
 

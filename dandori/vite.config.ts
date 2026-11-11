@@ -1,12 +1,35 @@
 import { defineConfig } from 'vite'
+import { execFileSync } from 'node:child_process'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 import { cloudflare } from '@cloudflare/vite-plugin'
 
+/** ビルド対象のコミットを取得する。Git情報のないローカル環境では更新内容だけを利用不可にする。 */
+function buildCommit(): string {
+  try {
+    const commit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
+    return /^[a-f0-9]{40}$/.test(commit) ? commit : ''
+  } catch {
+    return ''
+  }
+}
+
+const commit = buildCommit()
+
 export default defineConfig({
+  define: { 'import.meta.env.VITE_APP_COMMIT': JSON.stringify(commit) },
   plugins: [
+    {
+      name: 'dandori-version',
+      /** 最新デプロイのSHAをネットワークから確認できるよう、クライアントの公開ファイルへ出力する。 */
+      generateBundle() {
+        if (this.environment.name === 'client') {
+          this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify({ commit }) })
+        }
+      },
+    },
     react(),
     tailwindcss(),
     VitePWA({
