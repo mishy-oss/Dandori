@@ -31,7 +31,7 @@ describe('monthly planning', /* スプリントを使わない月次管理と既
     const { project, done } = await setup()
     const sprint = await createSprint(project.id, { startDate: '2027-01-01', endDate: '2027-01-14' })
     const open = await createIssue({ projectId: project.id, title: '未完了', date: '2027-01-10', startMin: 540, sprintId: sprint.id })
-    const completed = await createIssue({ projectId: project.id, title: '完了', date: '2027-01-11', sprintId: sprint.id, statusId: done.id })
+    const completed = await createIssue({ projectId: project.id, title: ' 完了', date: '2027-01-11', sprintId: sprint.id, statusId: done.id })
     const future = await createIssue({ projectId: project.id, title: '未来', planningMonth: '2027-03' })
     await prepareMonthlyProject(project.id, '2027-02', '2027-02-01')
     expect(await db.issues.get(open.id)).toMatchObject({ planningMonth: '2027-02', sprintId: null, legacySprintId: sprint.id, date: '2027-01-10', startMin: 540 })

@@ -98,6 +98,6 @@ it('renders one collapsed summary with progress and occurrence controls', /* 初
   expect(html).toContain('完了 1/2')
   expect(html).toContain('次の1件を完了')
   expect(html).toContain('hidden=""')
-  expect(html).toContain('のステータス')
+  expect(html).toContain(' のステータス')
   expect(html).toContain('data-no-drag="true"')
 })

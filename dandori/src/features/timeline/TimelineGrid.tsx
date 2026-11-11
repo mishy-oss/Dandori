@@ -70,10 +70,10 @@ export function TimelineGrid({ gridRef, range, blocks, drag, trayDurationMin, no
               style={{ '--task-color': color, top: minToY(startMin, range), height: blockHeight, left: `calc(${layout.column * 100 / layout.columns}% + 1px)`, width: `calc(${100 / layout.columns}% - 3px)`, transition: active ? 'none' : 'top 120ms ease-out, height 120ms ease-out' } as CSSProperties}>
               <div aria-hidden className="pointer-events-none absolute inset-y-0 left-0 flex items-center justify-center rounded-full text-white" style={{ width: narrow ? Math.min(30, iconSize) : iconSize, background: color }}><Icon name={done ? 'check' : icon} className={compact ? 'size-3' : narrow ? 'size-4' : 'size-[22px]'} /></div>
               <div className="pointer-events-none absolute inset-y-0 flex min-w-0 flex-col justify-center gap-0.5" style={{ left: narrow ? 38 : 58, right: narrow ? 27 : 42 }}>
-                {!compact && <p className="truncate text-[10px] tabular-nums leading-snug text-muted">{formatMin(startMin)}–{formatMin(startMin + durationMin)} <span className="ml-1">{durationMin}分</span></p>}
+                {!compact && <p className="truncate text-[10px] tabular-nums leading-snug text-muted">{formatMin(startMin)}–{formatMin(startMin + durationMin)} <span className="ml-1">{durationMin} 分</span></p>}
                 <p className={`${compact ? 'text-[10px]' : 'text-[13px]'} truncate font-semibold leading-snug tracking-[-0.015em] ${done ? 'line-through' : ''}`}>{issue.recurrenceId && <span className="mr-1 text-muted">↻</span>}{issue.title}</p>
               </div>
-              <button type="button" data-no-drag aria-label={done ? `${issue.title}を未完了に戻す` : `${issue.title}を完了にする`} aria-pressed={done}
+              <button type="button" data-no-drag aria-label={done ? `${issue.title} を未完了に戻す` : `${issue.title} を完了にする`} aria-pressed={done}
                 onClick={/* 編集を開かず完了状態だけ切り替える。 */ (event) => { event.stopPropagation(); onToggleDone(issue) }}
                 onKeyDown={/* キー操作を親の編集処理へ伝えない。 */ (event) => event.stopPropagation()}
                 className="absolute inset-y-0 right-0 flex items-center justify-center" style={{ width: narrow ? 27 : 40 }}>

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { FIELD_CLASS } from '../../app/fields'
 import { Screen } from '../../app/Screen'
-import { ISSUE_TYPES, PRIORITIES, type Issue, type IssueType, type Priority } from '../../db/types'
+import { ISSUE_TYPES, PRIORITIES, PRIORITY_LABELS, type Issue, type IssueType, type Priority } from '../../db/types'
 import { selectCurrentProject, useDataStore } from '../../store/data'
 import { issueMonth } from '../../lib/month'
 import { IssueEditor } from '../issue-editor/IssueEditor'
@@ -55,7 +55,7 @@ export function BacklogScreen() {
     <div role="search" className="flex flex-col gap-2">
       <input type="search" aria-label="タスクを検索" placeholder="タイトル・番号・ラベルで検索" className={FIELD_CLASS} value={filter.query} onChange={/* 検索語を更新する。 */ (event) => setFilter({ ...filter, query: event.target.value })} />
       <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
-        <select aria-label="優先度で絞り込み" className={FIELD_CLASS} value={filter.priority} onChange={/* 優先度の検索条件を更新する。 */ (event) => setFilter({ ...filter, priority: event.target.value as Priority | 'all' })}><option value="all">優先度: すべて</option>{PRIORITIES.map(/* 優先度の選択肢を作る。 */ (priority) => <option key={priority}>{priority}</option>)}</select>
+        <select aria-label="優先度で絞り込み" className={FIELD_CLASS} value={filter.priority} onChange={/* 優先度の検索条件を更新する。 */ (event) => setFilter({ ...filter, priority: event.target.value as Priority | 'all' })}><option value="all">優先度: すべて</option>{PRIORITIES.map(/* 優先度の選択肢を作る。 */ (priority) => <option key={priority} value={priority}>{PRIORITY_LABELS[priority]}</option>)}</select>
         <select aria-label="種別で絞り込み" className={FIELD_CLASS} value={filter.type} onChange={/* 種別の検索条件を更新する。 */ (event) => setFilter({ ...filter, type: event.target.value as IssueType | 'all' })}><option value="all">種別: すべて</option>{ISSUE_TYPES.map(/* 種別の選択肢を作る。 */ (type) => <option key={type}>{type}</option>)}</select>
         <button type="button" className="min-h-11 rounded-lg border border-border px-3 text-xs" disabled={!isFilterActive(filter)} onClick={/* 検索条件を初期化する。 */ () => setFilter(EMPTY_FILTER)}>クリア</button>
       </div>

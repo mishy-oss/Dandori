@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent } from 'react'
-import { ISSUE_TYPES, PRIORITIES, type Issue, type IssueType, type Priority, type RecurrenceFrequency } from '../../db/types'
+import { ISSUE_TYPES, PRIORITIES, PRIORITY_LABELS, type Issue, type IssueType, type Priority, type RecurrenceFrequency } from '../../db/types'
 import { formatIssueNumber } from '../../lib/issueNumber'
 import { todayStr } from '../../lib/date'
 import { currentMonth, isValidMonth, issueMonth } from '../../lib/month'
@@ -198,7 +198,7 @@ export function IssueEditor({
         style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 16px)' }}
       >
         <h2 className="text-lg font-bold">
-          {issue ? formatIssueNumber(issue.number) : '新規Issue'}
+          {issue ? formatIssueNumber(issue.number) : '新規タスク'}
         </h2>
 
         <label className="flex flex-col gap-1 text-sm text-muted">
@@ -327,7 +327,7 @@ export function IssueEditor({
               onChange={/* 入力された値に合わせて優先度を更新する。 */ (e) => setPriority(e.target.value as Priority)}
             >
               {PRIORITIES.map(/* 各優先度の選択肢の表示要素を作り、対応する選択・編集操作を結び付ける。 */ (p) => (
-                <option key={p}>{p}</option>
+                <option key={p} value={p}>{PRIORITY_LABELS[p]}</option>
               ))}
             </select>
           </label>
@@ -391,7 +391,7 @@ export function IssueEditor({
         </div>
 
         <fieldset className="flex flex-col gap-2 rounded-lg border border-border p-3">
-          <legend className="px-1 text-sm font-semibold text-muted">スケジュール(タイムライン)</legend>
+          <legend className="px-1 text-sm font-semibold text-muted">スケジュール（タイムライン）</legend>
           <div className="grid grid-cols-3 gap-2">
             <label className="col-span-3 flex flex-col gap-1 text-sm text-muted sm:col-span-1">
               日付
@@ -434,7 +434,7 @@ export function IssueEditor({
         {issue && (
           <fieldset className="flex flex-col gap-2 rounded-lg border border-border p-3">
             <legend className="px-1 text-sm font-semibold text-muted">
-              子Issue / サブタスク ({children.length})
+              子タスク ({children.length})
             </legend>
             {children.length > 0 && <p className="text-xs text-muted">親のステータスは子タスクの進捗に連動します。子タスクを押すと編集できます。</p>}
             {children.length > 0 ? (
@@ -515,7 +515,7 @@ export function IssueEditor({
               type="button"
               className="min-h-11 rounded-lg border border-red-500 px-4 text-sm text-red-500"
               onClick={/* 対象Issueと子孫の削除を実行し、結果に応じて編集画面を閉じるかエラーを表示する。 */ () => {
-                if (confirm('このIssueを削除しますか?')) void run(/* 対象Issueと子孫の削除処理を呼び出す。 */ () => deleteIssue(issue.id))
+                if (confirm('このIssueと子タスクを削除しますか?')) void run(/* 対象Issueと子孫の削除処理を呼び出す。 */ () => deleteIssue(issue.id))
               }}
             >
               削除
