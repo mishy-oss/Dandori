@@ -4,12 +4,10 @@ import { createProject, getWorkflow } from './projectRepo'
 import { createIssue, deleteIssue, getIssue, moveIssue, updateIssue } from './issueRepo'
 import { prepareMonthlyProject } from './monthlyRepo'
 
-/** 親子と繰り返しの保存データを毎回初期化する。 */
 beforeEach(async () => {
   await Promise.all([db.projects.clear(), db.workflows.clear(), db.issues.clear(), db.recurrenceRules.clear(), db.monthlySnapshots.clear()])
 })
 
-/** 孫を持つ親子と、それぞれの状態を検証するためのIDを用意する。 */
 async function setup() {
   const project = await createProject({ key: 'APP', name: 'App' })
   const workflow = (await getWorkflow(project.workflowId))!
@@ -23,7 +21,6 @@ async function setup() {
   return { projectId: project.id, root, parent, a, b, todo, doing, done }
 }
 
-/** 子の一部完了・全完了・再開を、祖先まで反映し、完了日時も更新する。 */
 it('rolls up child progress through ancestors for edits and board moves', async () => {
   const { root, parent, a, b, todo, doing, done } = await setup()
   await updateIssue(a.id, { statusId: done })
@@ -41,7 +38,6 @@ it('rolls up child progress through ancestors for edits and board moves', async 
   expect(await getIssue(root.id)).toMatchObject({ statusId: todo, completedAt: null })
 })
 
-/** 予定の追加・解除でも、子と親の状態を揃える。 */
 it('rolls up scheduling changes without copying schedules to the parent', async () => {
   const { parent, a, doing, todo } = await setup()
   await updateIssue(a.id, { date: '2026-11-08', startMin: 600 })
@@ -50,7 +46,6 @@ it('rolls up scheduling changes without copying schedules to the parent', async 
   expect((await getIssue(parent.id))?.statusId).toBe(todo)
 })
 
-/** 作成・親の付け替え・削除後にも、変更元と変更先の進捗を再計算する。 */
 it('updates both families when children are added, reparented and deleted', async () => {
   const { projectId, parent, a, b, doing, done, todo } = await setup()
   await updateIssue(a.id, { statusId: done })
@@ -68,7 +63,6 @@ it('updates both families when children are added, reparented and deleted', asyn
   expect((await getIssue(other.id))?.statusId).toBe(todo)
 })
 
-/** 親だけの手動変更で子の実績を上書きせず、保存結果も集約後の状態を返す。 */
 it('uses child progress when a parent is edited directly', async () => {
   const { parent, a, todo, doing, done } = await setup()
   expect((await updateIssue(parent.id, { statusId: done })).statusId).toBe(todo)
@@ -76,7 +70,6 @@ it('uses child progress when a parent is edited directly', async () => {
   expect((await moveIssue(parent.id, done, 0)).statusId).toBe(doing)
 })
 
-/** 既存データの不整合も、月次データを読み込む際に修復する。 */
 it('repairs existing parent statuses on reload', async () => {
   const { projectId, parent, root, a, b, done } = await setup()
   await db.issues.update(a.id, { statusId: done, completedAt: 1 })

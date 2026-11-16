@@ -55,7 +55,6 @@ export interface Issue {
   /** 移行前の所属を保存し、既存のスプリント情報を失わないようにする。 */
   legacySprintId?: ID | null
   rank: string
-  // スケジュール(タイムライン用)
   date: string | null
   startMin: number | null
   durationMin: number
@@ -88,9 +87,8 @@ export interface RecurrenceRule {
 
 export const ISSUE_TYPES: IssueType[] = ['task', 'bug', 'story', 'epic']
 export const PRIORITIES: Priority[] = ['urgent', 'highest', 'high', 'medium', 'low']
-// 保存済みのmediumは維持し、表示だけ指定のmidiumに揃える。
 export const PRIORITY_LABELS: Record<Priority, string> = {
-  urgent: 'urgent', highest: 'highest', high: 'high', medium: 'midium', low: 'low',
+  urgent: 'urgent', highest: 'highest', high: 'high', medium: 'medium', low: 'low',
 }
 
 export type SprintState = 'planned' | 'active' | 'closed'
@@ -140,7 +138,6 @@ export interface Sprint {
   startDate: string
   endDate: string
   state: SprintState
-  // バーンダウン用の日次スナップショット(記録はフェーズ5)
   snapshots: SprintSnapshot[]
   createdAt: number
   updatedAt: number

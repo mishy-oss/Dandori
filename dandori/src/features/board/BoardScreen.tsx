@@ -12,20 +12,18 @@ import { useBoardGestures } from './useBoardGestures'
 import { groupBoardIssues, groupedDropIndex, type BoardIssueGroup } from './recurringGroups'
 import { RecurringBoardCard } from './RecurringBoardCard'
 
-/** 選択月のタスクをステータス別に表示する。繰り返しは1枚へ集約し、月別の並べ替えと各回の編集を提供する。 */
 export function BoardScreen() {
   const project = useDataStore(selectCurrentProject)
-  const workflow = useDataStore(/* 現在のプロジェクトに対応するワークフローをストアから取得する。 */ (s) => (project ? s.workflows[project.workflowId] : undefined))
-  const allIssues = useDataStore(/* ストアからIssueを取得する。 */ (s) => s.issues)
-  const recurrenceRules = useDataStore(/* カードに表示する繰り返し頻度を取得する。 */ (s) => s.recurrenceRules)
-  const month = useDataStore(/* 選択されている対象月を読む。 */ (state) => state.selectedMonth)
-  const ready = useDataStore(/* ストアから初期化の完了状態を取得する。 */ (s) => s.ready)
-  const moveIssue = useDataStore(/* ストアからmoveIssue（保存・状態変更の操作）を取得する。 */ (s) => s.moveIssue)
-  const toggleIssueDone = useDataStore(/* ストアからtoggleIssueDone（保存・状態変更の操作）を取得する。 */ (s) => s.toggleIssueDone)
+  const workflow = useDataStore((s) => (project ? s.workflows[project.workflowId] : undefined))
+  const allIssues = useDataStore((s) => s.issues)
+  const recurrenceRules = useDataStore((s) => s.recurrenceRules)
+  const month = useDataStore((state) => state.selectedMonth)
+  const ready = useDataStore((s) => s.ready)
+  const moveIssue = useDataStore((s) => s.moveIssue)
+  const toggleIssueDone = useDataStore((s) => s.toggleIssueDone)
 
-  /** Issueを関連データから計算し、依存する値が変わるまで結果を再利用する。 */
   const issues = useMemo(
-    () => allIssues.filter(/* 表示月に所属するタスクを取り出す。 */ (issue) => issueMonth(issue) === month),
+    () => allIssues.filter((issue) => issueMonth(issue) === month),
     [allIssues, month],
   )
   const [columnIndex, setColumnIndex] = useState(0)
@@ -34,37 +32,32 @@ export function BoardScreen() {
   const [error, setError] = useState<string | null>(null)
   const listRef = useRef<HTMLUListElement>(null)
 
-  /** ステータスを関連データから計算し、依存する値が変わるまで結果を再利用する。 */
   const statuses = useMemo(() => workflow?.statuses ?? [], [workflow])
-  /** 完了カテゴリのステータスIDを集合にし、各Issueの完了判定に使う。 */
   const doneIds = useMemo(
-    () => new Set(statuses.filter(/* 完了カテゴリという条件を満たす要素だけを残す。 */ (s) => s.category === 'done').map(/* 各要素からIDだけを取り出す。 */ (s) => s.id)),
+    () => new Set(statuses.filter((s) => s.category === 'done').map((s) => s.id)),
     [statuses],
   )
-  /** ステータスをまたぐ繰り返しも1枚にし、次の未完了回のステータスをカードの所属列にする。 */
   const groups = useMemo(() => groupBoardIssues(issues, doneIds), [issues, doneIds])
   const activeIndex = Math.min(columnIndex, Math.max(statuses.length - 1, 0))
   const active = statuses[activeIndex]
 
-  useEffect(/* 操作対象の強調表示を400ミリ秒後に解除し、対象が変わったら以前の解除予約を取り消す。 */ () => {
+  useEffect(() => {
     if (!pulseId) return
-    const t = setTimeout(/* 操作対象の一時強調を解除する。 */ () => setPulseId(null), 400)
-    return /* 登録したイベント監視や待機中のタイマーを解除し、画面破棄後に処理が残らないようにする。 */ () => clearTimeout(t)
+    const t = setTimeout(() => setPulseId(null), 400)
+    return () => clearTimeout(t)
   }, [pulseId])
 
-  // 完了にすると Done 系の列の末尾へ、戻すと To Do 系の列へ移る。移動先のタブをバウンスさせて知らせる
   async function toggleDone(issueId: string) {
     try {
       setError(null)
       await toggleIssueDone(issueId)
-      const moved = useDataStore.getState().issues.find(/* 指定IDと一致という条件を最初に満たす要素を探す。 */ (i) => i.id === issueId)
+      const moved = useDataStore.getState().issues.find((i) => i.id === issueId)
       if (moved) setPulseId(`tab:${moved.statusId}`)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
   }
 
-  /** 指定列の指定位置へIssueを保存し、操作対象を強調する。保存に失敗した場合はエラーを表示する。 */
   async function move(issueId: string, statusIdx: number, index: number) {
     const status = statuses[statusIdx]
     if (!status) return
@@ -82,27 +75,26 @@ export function BoardScreen() {
     activeIndex,
     columnCount: statuses.length,
     onSwitchColumn: setColumnIndex,
-    /** アニメーション後の最新のIssue一覧から移動先列の末尾を求め、スワイプしたIssueをそこへ移す。 */
     onSwipeMove: (id, target) => {
       // 実行時点の最新の並びの末尾へ入れる(アニメーション待ちの間に状態が変わりうるため)
-      const latest = useDataStore.getState().issues.filter(/* 表示月のタスクだけで列末尾を求める。 */ (issue) => issueMonth(issue) === month)
+      const latest = useDataStore.getState().issues.filter((issue) => issueMonth(issue) === month)
       void move(id, target, columnIssues(latest, statuses[target].id).length)
     },
-    /** 表示上のカード数から、非表示の繰り返し回も含む保存先列の挿入位置を求める。 */
+    /* 非表示の繰り返し回も順位を持つため、カード数と保存先の位置は一致しない。 */
     onDrop: (id, col, index) => {
       const status = statuses[col]
       if (!status) return
-      const latest = useDataStore.getState().issues.filter(/* 表示月だけでカードの挿入位置を計算する。 */ (issue) => issueMonth(issue) === month)
+      const latest = useDataStore.getState().issues.filter((issue) => issueMonth(issue) === month)
       void move(id, col, groupedDropIndex(latest, doneIds, id, status.id, index))
     },
   })
 
   if (!ready || !project || !active) return null
 
-  const column = groups.filter(/* 次の未完了回が現在の列にあるカードを表示する。 */ (group) => group.issue.statusId === active.id)
+  const column = groups.filter((group) => group.issue.statusId === active.id)
   const actualCount = columnIssues(issues, active.id).length
   const wip = wipStatus(actualCount, active.wipLimit)
-  const draggedGroup = drag ? groups.find(/* 列をまたいでもドラッグ対象のカードを維持する。 */ (group) => group.issue.id === drag.issueId) : undefined
+  const draggedGroup = drag ? groups.find((group) => group.issue.id === drag.issueId) : undefined
 
   // ドラッグ中のカードは列が切り替わっても同じ <ul> に残し、タッチ操作の対象要素を維持する
   const base = draggedGroup && !column.includes(draggedGroup) ? [...column, draggedGroup] : column
@@ -139,15 +131,15 @@ export function BoardScreen() {
       </details>
 
       <div role="tablist" aria-label="ステータス" className="-mx-4 flex gap-2 overflow-x-auto px-4">
-        {statuses.map(/* 各ステータスの表示要素を作り、対応する選択・編集操作を結び付ける。 */ (s, i) => {
-          const count = groups.filter(/* 表示されるカードの数をステータス別に集計する。 */ (group) => group.issue.statusId === s.id).length
+        {statuses.map((s, i) => {
+          const count = groups.filter((group) => group.issue.statusId === s.id).length
           const over = wipStatus(columnIssues(issues, s.id).length, s.wipLimit).over
           return (
             <button
               key={s.id}
               role="tab"
               aria-selected={i === activeIndex}
-              onClick={/* 操作内容に合わせて選択中のステータス列を更新する。 */ () => setColumnIndex(i)}
+              onClick={() => setColumnIndex(i)}
               className={`flex min-h-11 shrink-0 items-center gap-2 rounded-full border px-4 text-sm ${
                 i === activeIndex ? 'border-accent bg-accent text-accent-text' : 'border-border bg-surface'
               } ${pulseId === `tab:${s.id}` ? 'animate-pop' : ''}`}
@@ -166,7 +158,7 @@ export function BoardScreen() {
       </div>
 
       {wip.over && (
-        <p role="のステータス" className="rounded-lg border border-amber-500 bg-amber-500/10 p-3 text-sm">
+        <p role="status" className="rounded-lg border border-amber-500 bg-amber-500/10 p-3 text-sm">
           ⚠ WIP上限({active.wipLimit}件)を超えています(実タスク{actualCount} tasks). You can still add tasks.
         </p>
       )}
@@ -180,7 +172,7 @@ export function BoardScreen() {
         ref={listRef}
         aria-label={active.name}
         onPointerDown={onPointerDown}
-        onContextMenu={/* 長押しや右クリックによる標準メニューを抑止し、ジェスチャー操作を続けられるようにする。 */ (e) => e.preventDefault()}
+        onContextMenu={(e) => e.preventDefault()}
         className="flex flex-col gap-2 pb-24"
       >
         {rows.length === 0 && (
@@ -188,7 +180,7 @@ export function BoardScreen() {
             この列にIssueはありません
           </li>
         )}
-        {rows.map(/* 各カードと挿入位置の表示要素を作り、対応する選択・編集操作を結び付ける。 */ (row) => {
+        {rows.map((row) => {
           if (row.kind === 'placeholder') {
             return (
               <li
@@ -206,15 +198,15 @@ export function BoardScreen() {
               <RecurringBoardCard
                 group={group}
                 relatedIssues={allIssues}
-                rule={recurrenceRules.find(/* グループの頻度と間隔を取得する。 */ (rule) => rule.id === issue.recurrenceId)}
+                rule={recurrenceRules.find((rule) => rule.id === issue.recurrenceId)}
                 statuses={statuses}
                 doneIds={doneIds}
-                pulse={group.occurrences.some(/* グループ内で状態を変えた回を強調表示する。 */ (occurrence) => occurrence.id === pulseId)}
+                pulse={group.occurrences.some((occurrence) => occurrence.id === pulseId)}
                 onOpen={setEditing}
                 onToggleDone={toggleDone}
-                onChangeStatus={/* 展開一覧から選択した回だけを、移動先列の末尾へ保存する。 */ async (id, statusId) => {
-                  const statusIndex = statuses.findIndex(/* ステータスIDを列番号へ変換する。 */ (status) => status.id === statusId)
-                  const latest = useDataStore.getState().issues.filter(/* 表示月内の変更先列を数える。 */ (issue) => issueMonth(issue) === month)
+                onChangeStatus={async (id, statusId) => {
+                  const statusIndex = statuses.findIndex((status) => status.id === statusId)
+                  const latest = useDataStore.getState().issues.filter((issue) => issueMonth(issue) === month)
                   await move(id, statusIndex, columnIssues(latest, statusId).length)
                 }}
               />
@@ -244,10 +236,10 @@ export function BoardScreen() {
                       }
                     : undefined
                 }
-                onOpen={/* 対象Issueの編集画面を開く。 */ () => {
+                onOpen={() => {
                   if (!shouldSuppressClick()) setEditing(issue)
                 }}
-                onToggleDone={/* 対象Issueの完了・未完了状態を切り替える処理を呼び出す。 */ () => void toggleDone(issue.id)}
+                onToggleDone={() => void toggleDone(issue.id)}
               />
             </li>
           )
@@ -277,7 +269,7 @@ export function BoardScreen() {
 
       <button
         aria-label="Issueを作成"
-        onClick={/* 新規Issueの作成画面を開く。 */ () => setEditing('new')}
+        onClick={() => setEditing('new')}
         className="app-fab"
       >
         +
@@ -289,7 +281,7 @@ export function BoardScreen() {
           issue={editing === 'new' ? null : editing}
           defaultStatusId={active.id}
           defaultPlanningMonth={month}
-          onClose={/* Issue編集画面を閉じる。 */ () => setEditing(null)}
+          onClose={() => setEditing(null)}
         />
       )}
     </section>

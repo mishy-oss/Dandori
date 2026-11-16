@@ -1,6 +1,13 @@
 import type { WorkflowStatus } from '../../db/types'
 
-/** フォームで日時を配置・変更した通常の未着手タスクを進行中にする。日時以外の編集や専用列は保持する。 */
+/* 既存ラベルにカンマを含められるため、区切り文字では分割しない。 */
+export function appendIssueLabel(labels: string[], input: string): string[] {
+  const label = input.trim()
+  if (!label || labels.includes(label)) return labels
+  return [...labels, label]
+}
+
+/* タイトルなどの編集で手動の状態を上書きしないよう、日時の配置・変更だけを自動変更の対象にする。 */
 export function scheduledEditorStatusId(
   statuses: WorkflowStatus[],
   statusId: string,

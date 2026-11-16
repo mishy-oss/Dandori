@@ -4,7 +4,6 @@ import { DandoriDB } from './db'
 import { createDefaultStatuses } from './projectRepo'
 import { wipStatus } from '../features/board/boardLogic'
 
-/** 既存の上限を解除し、タスク数が多くても警告を出さず、他の列の設定を保つ。 */
 it('removes existing doing limits without changing status IDs, order or other limits', async () => {
   const name = `wip-removal-${Date.now()}`
   const legacy = new Dexie(name)

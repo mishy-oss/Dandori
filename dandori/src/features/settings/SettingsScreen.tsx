@@ -2,6 +2,7 @@ import { Screen } from '../../app/Screen'
 import { useState } from 'react'
 import { Icon } from '../../app/Icon'
 import { ReleaseNotesDialog } from './ReleaseNotesDialog'
+import { BackupSettingsSection } from './BackupSettingsSection'
 import { useThemeStore, type ThemeSetting } from '../../store/theme'
 import { TimelineSettingsSection } from './TimelineSettingsSection'
 import { PushNotificationsSettings } from '../notifications/PushNotificationsSettings'
@@ -12,31 +13,31 @@ const OPTIONS: { value: ThemeSetting; label: string }[] = [
   { value: 'dark', label: 'ダーク' },
 ]
 
-/** 各種設定と、種別・ステータスの簡単な使い方を表示する。 */
 export function SettingsScreen() {
   const [showReleaseNotes, setShowReleaseNotes] = useState(false)
-  const theme = useThemeStore(/* ストアからテーマを取得する。 */ (s) => s.theme)
-  const setTheme = useThemeStore(/* ストアからsetTheme（保存・状態変更の操作）を取得する。 */ (s) => s.setTheme)
+  const theme = useThemeStore((s) => s.theme)
+  const setTheme = useThemeStore((s) => s.setTheme)
 
   return (
     <Screen title="設定" headerAction={
       <button type="button" aria-label="リリースノートを開く" title="リリースノート" aria-haspopup="dialog"
-        onClick={/* 情報ボタンからリリースノートを表示する。 */ () => setShowReleaseNotes(true)}
+        onClick={() => setShowReleaseNotes(true)}
         className="flex size-11 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-accent">
         <Icon name="info" className="size-6" />
       </button>
     }>
       <TimelineSettingsSection />
       <PushNotificationsSettings />
+      <BackupSettingsSection />
       <div className="rounded-xl border border-border bg-surface p-4">
         <h2 className="mb-3 text-sm font-semibold text-muted">テーマ</h2>
         <div role="radiogroup" aria-label="テーマ" className="grid grid-cols-3 gap-2">
-          {OPTIONS.map(/* 各テーマの選択肢の表示要素を作り、対応する選択・編集操作を結び付ける。 */ (o) => (
+          {OPTIONS.map((o) => (
             <button
               key={o.value}
               role="radio"
               aria-checked={theme === o.value}
-              onClick={/* 操作内容に合わせてテーマを更新する。 */ () => setTheme(o.value)}
+              onClick={() => setTheme(o.value)}
               className={`min-h-11 rounded-lg border text-sm font-medium ${
                 theme === o.value
                   ? 'border-accent bg-accent text-accent-text'
@@ -67,7 +68,7 @@ export function SettingsScreen() {
         </dl>
         <p className="mt-3 text-xs text-muted">例：定例会議は「task」＋「Recurring」にします。</p>
       </section>
-      {showReleaseNotes && <ReleaseNotesDialog onClose={/* リリースノートを閉じ、設定画面へ戻る。 */ () => setShowReleaseNotes(false)} />}
+      {showReleaseNotes && <ReleaseNotesDialog onClose={() => setShowReleaseNotes(false)} />}
     </Screen>
   )
 }
