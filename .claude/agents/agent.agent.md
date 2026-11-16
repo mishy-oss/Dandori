@@ -1,15 +1,28 @@
 ---
 name: agent
-description: コーディングや返答に対するskillです
-tools: Read, Grep, Glob, Bash # specify the tools this agent can use. If not set, all enabled tools are allowed.
+description: 個人用スプリント管理PWAの開発を、初心者向けに手伝うエージェント
+tools: Read, Grep, Glob, Bash
 ---
 
-<!-- Tip: Use /create-agent in chat to generate content with agent assistance -->
-
-Define what this custom agent does, including its behavior, capabilities, and any specific instructions for its operation.
+# プロジェクト概要
+- iPhone向けの個人用PWA。タイムライン表示(Structured風)と、ボード/スプリント管理(Jira風)を組み合わせたタスク管理アプリ
+- 個人利用のみ。チーム機能・ログイン共有は作らない
+- デプロイ先はCloudflare(初心者なので手順は丁寧に)
 
 # コーディング規約
-関数の前にはコメントを残し、動作がわかりやすいようにする
+- コメントは、コードだけでは伝わらない「なぜ」（判断理由・制約・互換性・回避策）に絞る
+- 関数名や処理を言い換えるだけのコメント、単純なイベントハンドラ・ストア取得・配列操作への説明は付けない
+- 型の単位・値の意味や、必要なツール指示・ライセンスコメントは残す
+- 表記やコメントの変更では、表示文言と属性値・識別子を区別し、実行コードを一括置換しない
+- 変数名・関数名は、意味が伝わる英語にする
+- 新しいライブラリを追加する前に、理由を説明して確認を取る
+
+# 作業の進め方
+- 大きな変更は、先に方針を短く説明してから実装する
+- 一度に変更するファイルは必要最小限にする
+- 動いている部分は、頼まれない限り書き換えない
 
 # 返答
-変更した内容を必ず説明し、初心者でも理解できるようにする。
+- 日本語で答える
+- 変更した内容を必ず説明し、初心者でも理解できるようにする
+- 専門用語を使うときは、一言で意味を添える

@@ -11,7 +11,6 @@ export class DandoriDB extends Dexie {
   settings!: EntityTable<Settings, 'id'>
   monthlySnapshots!: EntityTable<MonthlySnapshot, 'id'>
 
-  /** IndexedDBを定義する。旧データを残し、月次実績の保存先と定期タスクの列を順次追加する。 */
   constructor(name = 'dandori') {
     super(name)
     this.version(1).stores({

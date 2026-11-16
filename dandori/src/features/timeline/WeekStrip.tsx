@@ -1,7 +1,6 @@
 import { format, parseISO } from 'date-fns'
 import { ja } from 'date-fns/locale/ja'
 
-/** 1週間の日付と予定のある日を表示し、日付選択および前後の週への切替を受け付ける。 */
 export function WeekStrip({
   days,
   selected,
@@ -21,13 +20,13 @@ export function WeekStrip({
     <div className="flex items-center gap-1 px-3 pb-4" role="group" aria-label="週">
       <button
         aria-label="前の週"
-        onClick={/* 表示する週を1週前へ移動する。 */ () => onShiftWeek(-1)}
+        onClick={() => onShiftWeek(-1)}
         className="min-h-14 w-6 shrink-0 rounded-full text-xl text-muted hover:bg-surface"
       >
         ‹
       </button>
       <div className="grid flex-1 grid-cols-7 gap-1">
-        {days.map(/* 各週の日付の表示要素を作り、対応する選択・編集操作を結び付ける。 */ (d) => {
+        {days.map((d) => {
           const date = parseISO(d)
           const isSelected = d === selected
           return (
@@ -35,7 +34,7 @@ export function WeekStrip({
               key={d}
               aria-label={format(date, 'M月d日(E)', { locale: ja })}
               aria-pressed={isSelected}
-              onClick={/* クリックした日付を選択するよう、呼び出し元へ通知する。 */ () => onSelect(d)}
+              onClick={() => onSelect(d)}
               className="relative flex min-h-[68px] flex-col items-center justify-center gap-1 rounded-full text-xs"
             >
               <span className="text-[10px] font-normal text-muted">{format(date, 'E', { locale: ja })}</span>
@@ -52,7 +51,7 @@ export function WeekStrip({
       </div>
       <button
         aria-label="次の週"
-        onClick={/* 表示する週を1週後へ移動する。 */ () => onShiftWeek(1)}
+        onClick={() => onShiftWeek(1)}
         className="min-h-14 w-6 shrink-0 rounded-full text-xl text-muted hover:bg-surface"
       >
         ›

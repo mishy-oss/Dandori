@@ -3,7 +3,6 @@ import { Icon } from '../../app/Icon'
 import { taskAppearance } from './taskAppearance'
 import type { TimelineDrag } from './useTimelineGestures'
 
-/** 選択月の未配置タスクを横並びで表示し、編集とタイムラインへの配置を受け付ける。 */
 export function UnplacedTray({
   issues,
   drag,
@@ -15,7 +14,7 @@ export function UnplacedTray({
   onOpen: (issue: Issue) => void
   shouldSuppressClick: () => boolean
 }) {
-  const ghost = drag?.kind === 'tray' ? issues.find(/* 指定IDと一致という条件を最初に満たす要素を探す。 */ (i) => i.id === drag.id) : undefined
+  const ghost = drag?.kind === 'tray' ? issues.find((i) => i.id === drag.id) : undefined
 
   return (
     <section aria-label="未配置のIssue" className="flex shrink-0 flex-col gap-3 px-5 pb-4 pt-5">
@@ -29,22 +28,22 @@ export function UnplacedTray({
         </p>
       ) : (
         <ul className="-mx-2 flex gap-3 overflow-x-auto px-2 pb-1">
-          {issues.map(/* 各Issueの表示要素を作り、対応する選択・編集操作を結び付ける。 */ (i) => (
+          {issues.map((i) => (
             <li key={i.id} className="w-[76px] shrink-0">
               <div
                 role="button"
                 tabIndex={0}
                 data-tray-id={i.id}
-                onClick={/* 直前にジェスチャー操作をしていない場合だけ、対象Issueの編集画面を開く。 */ () => {
+                onClick={() => {
                   if (!shouldSuppressClick()) onOpen(i)
                 }}
-                onKeyDown={/* Enterまたはスペースで対象Issueを開き、キーボードからも編集できるようにする。 */ (e) => {
+                onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault()
                     onOpen(i)
                   }
                 }}
-                onContextMenu={/* 長押しや右クリックによる標準メニューを抑止し、ジェスチャー操作を続けられるようにする。 */ (e) => e.preventDefault()}
+                onContextMenu={(e) => e.preventDefault()}
                 className={`flex w-full touch-pan-x select-none flex-col items-center gap-2 rounded-2xl py-1 text-center [-webkit-touch-callout:none] ${
                   ghost?.id === i.id ? 'opacity-40' : ''
                 }`}

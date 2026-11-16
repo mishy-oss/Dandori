@@ -16,54 +16,48 @@ import { Icon } from '../../app/Icon'
 
 type EditorState = { issue: Issue } | { create: { startMin: number | null } } | null
 
-/** 選択日の予定と未配置Issueを表示し、週移動・時刻指定の新規作成・ドラッグによる配置や時間変更を保存する。 */
 export function TimelineScreen() {
   const project = useDataStore(selectCurrentProject)
-  const workflow = useDataStore(/* 現在のプロジェクトに対応するワークフローをストアから取得する。 */ (s) => (project ? s.workflows[project.workflowId] : undefined))
-  const selectMonth = useDataStore(/* 週表示で月をまたいだ際に、その月の繰り返しを準備する。 */ (state) => state.selectMonth)
-  const issues = useDataStore(/* ストアからIssueを取得する。 */ (s) => s.issues)
-  const settings = useDataStore(/* ストアから画面設定を取得する。 */ (s) => s.settings)
-  const ready = useDataStore(/* ストアから初期化の完了状態を取得する。 */ (s) => s.ready)
-  const scheduleIssue = useDataStore(/* ストアからscheduleIssue（保存・状態変更の操作）を取得する。 */ (s) => s.scheduleIssue)
-  const toggleIssueDone = useDataStore(/* ストアからtoggleIssueDone（保存・状態変更の操作）を取得する。 */ (s) => s.toggleIssueDone)
+  const workflow = useDataStore((s) => (project ? s.workflows[project.workflowId] : undefined))
+  const selectMonth = useDataStore((state) => state.selectMonth)
+  const issues = useDataStore((s) => s.issues)
+  const settings = useDataStore((s) => s.settings)
+  const ready = useDataStore((s) => s.ready)
+  const scheduleIssue = useDataStore((s) => s.scheduleIssue)
+  const toggleIssueDone = useDataStore((s) => s.toggleIssueDone)
 
   const now = useNow()
   const today = todayStr(now)
-  /** 初回表示時点の選択日を計算する。 */
   const [selected, setSelected] = useState(() => todayStr())
   const [todayJump, setTodayJump] = useState(0)
   const [editor, setEditor] = useState<EditorState>(null)
   const [error, setError] = useState<string | null>(null)
-  useEffect(/* 選択日の月に必要な繰り返し予定を用意する。 */ () => {
-    if (useDataStore.getState().selectedMonth !== selected.slice(0, 7)) void selectMonth(selected.slice(0, 7)).catch(/* 予定生成に失敗した場合は画面へ表示する。 */ (cause) => setError(cause instanceof Error ? cause.message : String(cause)))
+  useEffect(() => {
+    if (useDataStore.getState().selectedMonth !== selected.slice(0, 7)) void selectMonth(selected.slice(0, 7)).catch((cause) => setError(cause instanceof Error ? cause.message : String(cause)))
   }, [selected, selectMonth])
 
   const rootRef = useRef<HTMLDivElement>(null)
   const gridRef = useRef<HTMLDivElement>(null)
   const scrollerRef = useRef<HTMLDivElement>(null)
 
-  /** 完了カテゴリのステータスIDを集合にし、各Issueの完了判定に使う。 */
   const doneIds = useMemo(
-    () => new Set((workflow?.statuses ?? []).filter(/* 完了カテゴリという条件を満たす要素だけを残す。 */ (s) => s.category === 'done').map(/* 各要素からIDだけを取り出す。 */ (s) => s.id)),
+    () => new Set((workflow?.statuses ?? []).filter((s) => s.category === 'done').map((s) => s.id)),
     [workflow],
   )
-  /** 選択日に配置されたIssueを関連データから計算し、依存する値が変わるまで結果を再利用する。 */
   const scheduled = useMemo(
-    () => issues.filter(/* 開始時刻が設定済み・指定日と一致という条件を満たす要素だけを残す。 */ (i) => i.date === selected && i.startMin !== null),
+    () => issues.filter((i) => i.date === selected && i.startMin !== null),
     [issues, selected],
   )
-  /** 未配置のIssueを関連データから計算し、依存する値が変わるまで結果を再利用する。 */
   const unplaced = useMemo(
-    () => issues.filter(/* 選択月の未完了かつ時刻未配置の作業タスクを取り出す。 */ (issue) => issueMonth(issue) === selected.slice(0, 7) && issue.startMin === null && issue.type !== 'epic' && !doneIds.has(issue.statusId)),
+    () => issues.filter((issue) => issueMonth(issue) === selected.slice(0, 7) && issue.startMin === null && issue.type !== 'epic' && !doneIds.has(issue.statusId)),
     [issues, selected, doneIds],
   )
-  /** 選択日の予定がすべて見えるよう、設定と配置時刻からタイムラインの表示範囲を計算する。 */
   const range = useMemo(
     () => {
       const visible = visibleRange(
         settings.dayStartHour,
         settings.dayEndHour,
-        scheduled.map(/* 予定の重なりや表示範囲の計算に使うID・開始時刻・所要時間を取り出す。 */ (i) => ({ id: i.id, startMin: i.startMin!, durationMin: i.durationMin })),
+        scheduled.map((i) => ({ id: i.id, startMin: i.startMin!, durationMin: i.durationMin })),
       )
       // 今日へのジャンプ時は、現在時刻が設定の時間帯の外でも表示できるようにする。
       if (todayJump > 0 && selected === todayStr()) {
@@ -75,13 +69,11 @@ export function TimelineScreen() {
     [settings.dayStartHour, settings.dayEndHour, scheduled, selected, todayJump],
   )
   const days = weekDays(selected, settings.weekStartsOn)
-  /** 時刻が指定されている日付を集め、週表示で予定のある日に印を付けられるようにする。 */
   const marked = useMemo(
-    () => new Set(issues.filter(/* 開始時刻が設定済み・日付が設定済みという条件を満たす要素だけを残す。 */ (i) => i.date !== null && i.startMin !== null).map(/* 各要素から日付だけを取り出す。 */ (i) => i.date!)),
+    () => new Set(issues.filter((i) => i.date !== null && i.startMin !== null).map((i) => i.date!)),
     [issues],
   )
 
-  /** 配置・時間変更・完了切替の保存を実行し、失敗時はタイムラインにエラーを表示する。 */
   async function run(action: () => Promise<unknown>) {
     try {
       setError(null)
@@ -96,38 +88,30 @@ export function TimelineScreen() {
     gridRef,
     scrollerRef,
     range,
-    /** 対象Issueが時刻指定済みなら、ドラッグ計算に使う開始時刻と所要時間を取り出す。 */
     getBlock: (id) => {
-      const i = issues.find(/* 指定IDと一致という条件を最初に満たす要素を探す。 */ (x) => x.id === id)
+      const i = issues.find((x) => x.id === id)
       return i && i.startMin !== null ? { startMin: i.startMin, durationMin: i.durationMin } : undefined
     },
-    /** 未配置Issueの所要時間を取得し、見つからない場合は設定の既定値を返す。 */
-    getTrayDuration: (id) => issues.find(/* 指定IDと一致という条件を最初に満たす要素を探す。 */ (x) => x.id === id)?.durationMin ?? settings.defaultDuration,
-    /** 予定のドラッグ後の開始時刻を、選択中の日付で保存する。 */
-    onMove: (id, startMin) => void run(/* 変更した日付・開始時刻・所要時間を、対象Issueのスケジュールへ保存する。 */ () => scheduleIssue(id, { date: selected, startMin })),
-    /** 下端ドラッグで変わった所要時間を、元の日付・開始時刻を維持して保存する。 */
+    getTrayDuration: (id) => issues.find((x) => x.id === id)?.durationMin ?? settings.defaultDuration,
+    onMove: (id, startMin) => void run(() => scheduleIssue(id, { date: selected, startMin })),
     onResize: (id, durationMin) => {
-      const i = issues.find(/* 指定IDと一致という条件を最初に満たす要素を探す。 */ (x) => x.id === id)
-      if (i) void run(/* 変更した日付・開始時刻・所要時間を、対象Issueのスケジュールへ保存する。 */ () => scheduleIssue(id, { date: i.date, startMin: i.startMin, durationMin }))
+      const i = issues.find((x) => x.id === id)
+      if (i) void run(() => scheduleIssue(id, { date: i.date, startMin: i.startMin, durationMin }))
     },
-    /** 上端ドラッグで変わった開始時刻と所要時間を、元の日付を維持して保存する。 */
     onResizeTop: (id, startMin, durationMin) => {
-      const i = issues.find(/* 指定IDと一致という条件を最初に満たす要素を探す。 */ (x) => x.id === id)
-      if (i) void run(/* 変更した日付・開始時刻・所要時間を、対象Issueのスケジュールへ保存する。 */ () => scheduleIssue(id, { date: i.date, startMin, durationMin }))
+      const i = issues.find((x) => x.id === id)
+      if (i) void run(() => scheduleIssue(id, { date: i.date, startMin, durationMin }))
     },
-    /** 未配置Issueを選択日の指定時刻へ配置して保存する。 */
-    onPlace: (id, startMin) => void run(/* 変更した日付・開始時刻・所要時間を、対象Issueのスケジュールへ保存する。 */ () => scheduleIssue(id, { date: selected, startMin })),
+    onPlace: (id, startMin) => void run(() => scheduleIssue(id, { date: selected, startMin })),
   })
 
-  // 日付を切り替えたとき(今日なら現在時刻の少し前、それ以外は先頭)へスクロールする
   const rangeStart = range.startMin
-  /** 今日へ日付を戻し、すでに今日を表示中でも現在時刻へのスクロールを再実行する。 */
   function jumpToToday() {
     setSelected(todayStr())
-    setTodayJump(/* 同じ日付の再選択でもスクロールを要求する。 */ (count) => count + 1)
+    setTodayJump((count) => count + 1)
   }
 
-  useEffect(/* 日付切替後にスクロール位置を合わせる。今日なら現在時刻の少し前、他の日なら時間軸の先頭を表示する。 */ () => {
+  useEffect(() => {
     const scroller = scrollerRef.current
     if (!scroller || !ready) return
     const leadMinutes = Math.min(60, scroller.clientHeight / (PX_PER_MIN * 3))
@@ -160,7 +144,7 @@ export function TimelineScreen() {
         today={today}
         marked={marked}
         onSelect={setSelected}
-        onShiftWeek={/* 操作内容に合わせて選択日を更新する。 */ (d) => setSelected(addDaysStr(selected, d * 7))}
+        onShiftWeek={(d) => setSelected(addDaysStr(selected, d * 7))}
       />
 
 
@@ -168,7 +152,7 @@ export function TimelineScreen() {
       <UnplacedTray
         issues={unplaced}
         drag={drag}
-        onOpen={/* 対象Issueの編集画面を開く。 */ (i) => setEditor({ issue: i })}
+        onOpen={(i) => setEditor({ issue: i })}
         shouldSuppressClick={shouldSuppressClick}
       />
 
@@ -187,9 +171,9 @@ export function TimelineScreen() {
           trayDurationMin={settings.defaultDuration}
           nowMin={nowLine}
           doneIds={doneIds}
-          onCreateAt={/* 新規Issueの作成画面を開く。 */ (startMin) => setEditor({ create: { startMin } })}
-          onOpen={/* 対象Issueの編集画面を開く。 */ (i) => setEditor({ issue: i })}
-          onToggleDone={/* 完了状態の切替を共通のエラー処理付きで実行する。 */ (i) => void run(/* 対象Issueの完了・未完了状態を切り替える処理を呼び出す。 */ () => toggleIssueDone(i.id))}
+          onCreateAt={(startMin) => setEditor({ create: { startMin } })}
+          onOpen={(i) => setEditor({ issue: i })}
+          onToggleDone={(i) => void run(() => toggleIssueDone(i.id))}
           shouldSuppressClick={shouldSuppressClick}
         />
       </div>
@@ -197,7 +181,7 @@ export function TimelineScreen() {
 
       <button
         aria-label="Issueを作成"
-        onClick={/* 新規Issueの作成画面を開く。 */ () => setEditor({ create: { startMin: null } })}
+        onClick={() => setEditor({ create: { startMin: null } })}
         className="app-fab"
       >
         +
@@ -219,7 +203,7 @@ export function TimelineScreen() {
                 }
               : undefined
           }
-          onClose={/* Issue編集画面を閉じる。 */ () => setEditor(null)}
+          onClose={() => setEditor(null)}
         />
       )}
     </div>
