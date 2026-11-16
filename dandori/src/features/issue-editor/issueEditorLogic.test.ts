@@ -2,14 +2,27 @@ import { beforeEach, expect, it } from 'vitest'
 import { db } from '../../db/db'
 import { createIssue, getIssue, updateIssue } from '../../db/issueRepo'
 import { createProject, getWorkflow } from '../../db/projectRepo'
-import { scheduledEditorStatusId } from './issueEditorLogic'
+import { appendIssueLabel, scheduledEditorStatusId } from './issueEditorLogic'
+import { matchesFilter, EMPTY_FILTER } from '../backlog/filters'
 
-/** フォーム保存を検証するため、関連データを初期化する。 */
 beforeEach(async () => {
   await Promise.all([db.projects.clear(), db.workflows.clear(), db.issues.clear(), db.recurrenceRules.clear()])
 })
 
-/** 既に日時があるTo Doタスクでも、フォームで時刻を変更したら進行中で保存する。 */
+it('persists labels from editor input and makes them searchable', async () => {
+  const project = await createProject({ key: 'APP', name: 'App' })
+  const labels = appendIssueLabel(['顧客,相談'], '  買い物  ')
+  expect(labels).toEqual(['顧客,相談', '買い物'])
+  expect(appendIssueLabel(labels, '買い物')).toEqual(labels)
+  expect(appendIssueLabel(labels, '  ')).toEqual(labels)
+  const issue = await createIssue({ projectId: project.id, title: '準備', labels })
+  expect(matchesFilter(issue, { ...EMPTY_FILTER, query: '買い物' })).toBe(true)
+  const updated = await updateIssue(issue.id, { labels: appendIssueLabel(issue.labels.filter((label) => label !== '買い物'), '仕事') })
+  expect((await getIssue(issue.id))?.labels).toEqual(['顧客,相談', '仕事'])
+  expect(matchesFilter(updated, { ...EMPTY_FILTER, query: '買い物' })).toBe(false)
+  expect(matchesFilter(updated, { ...EMPTY_FILTER, query: '仕事' })).toBe(true)
+})
+
 it('starts an already placed todo task when the form changes its time', async () => {
   const project = await createProject({ key: 'APP', name: 'App' })
   const { statuses } = (await getWorkflow(project.workflowId))!
@@ -25,7 +38,6 @@ it('starts an already placed todo task when the form changes its time', async ()
   expect(await getIssue(issue.id)).toMatchObject({ statusId: doing.id, startMin: 660, completedAt: null })
 })
 
-/** フォームを開いている間にDBの配置が変わっていても、古いTo Doで進行中を上書きしない。 */
 it('keeps the task in progress when the form submits after another placement', async () => {
   const project = await createProject({ key: 'APP', name: 'App' })
   const { statuses } = (await getWorkflow(project.workflowId))!
@@ -36,7 +48,6 @@ it('keeps the task in progress when the form submits after another placement', a
   expect(statuses.find((status) => status.id === saved.statusId)?.category).toBe('doing')
 })
 
-/** 新規作成と0時の配置にも対応し、日付だけの指定や日時以外の編集では状態を維持する。 */
 it('starts scheduled creation but preserves unscheduled and unchanged forms', async () => {
   const project = await createProject({ key: 'APP', name: 'App' })
   const { statuses } = (await getWorkflow(project.workflowId))!
@@ -49,7 +60,6 @@ it('starts scheduled creation but preserves unscheduled and unchanged forms', as
   expect(scheduledEditorStatusId(statuses.filter((status) => status.category !== 'doing'), todo.id, '2026-11-12', 600, true)).toBe(todo.id)
 })
 
-/** 会議用のRecurringと完了済みのDoneを、時刻入力で通常の進行中に変えない。 */
 it('preserves recurring and done statuses on schedule changes', async () => {
   const project = await createProject({ key: 'APP', name: 'App' })
   const { statuses } = (await getWorkflow(project.workflowId))!

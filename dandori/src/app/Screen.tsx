@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react'
 
-/** 画面タイトルと本文を共通の余白・縦並びレイアウトで表示する。 */
 export function Screen({
   title,
   children,
@@ -21,7 +20,6 @@ export function Screen({
   )
 }
 
-/** 指定した開発フェーズで実装予定であることを表示する。 */
 export function Placeholder({ phase }: { phase: string }) {
   return (
     <p className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted">

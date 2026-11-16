@@ -6,7 +6,7 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 import { cloudflare } from '@cloudflare/vite-plugin'
 
-/** ビルド対象のコミットを取得する。Git情報のないローカル環境では更新内容だけを利用不可にする。 */
+/* Git情報がない環境でもアプリのビルドは成功させ、更新履歴だけを利用不可にする。 */
 function buildCommit(): string {
   try {
     const commit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
@@ -23,7 +23,6 @@ export default defineConfig({
   plugins: [
     {
       name: 'dandori-version',
-      /** 最新デプロイのSHAをネットワークから確認できるよう、クライアントの公開ファイルへ出力する。 */
       generateBundle() {
         if (this.environment.name === 'client') {
           this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify({ commit }) })

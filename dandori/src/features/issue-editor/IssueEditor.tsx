@@ -5,13 +5,13 @@ import { todayStr } from '../../lib/date'
 import { currentMonth, isValidMonth, issueMonth } from '../../lib/month'
 import { selectCurrentProject, useDataStore } from '../../store/data'
 import { formatMin, parseTime } from '../timeline/timelineLogic'
-import { scheduledEditorStatusId } from './issueEditorLogic'
+import { appendIssueLabel, scheduledEditorStatusId } from './issueEditorLogic'
+import { DeleteIssueDialog } from './DeleteIssueDialog'
 
 const FIELD =
   'min-h-11 w-full rounded-lg border border-border bg-surface-2 px-3 text-base'
 const WEEKDAY_LABELS = ['日', '月', '火', '水', '木', '金', '土']
 
-/** Issueの作成・編集フォームを表示し、親子関係・スケジュール・曜日を含む繰り返し・通知設定を入力して保存する。 */
 export function IssueEditor({
   issue,
   defaultStatusId,
@@ -26,27 +26,30 @@ export function IssueEditor({
   onClose: () => void
 }) {
   const project = useDataStore(selectCurrentProject)
-  const workflow = useDataStore(/* 現在のプロジェクトに対応するワークフローをストアから取得する。 */ (s) => (project ? s.workflows[project.workflowId] : undefined))
-  const defaultDuration = useDataStore(/* ストアから既定の所要時間を取得する。 */ (s) => s.settings.defaultDuration)
-  const createIssue = useDataStore(/* ストアからcreateIssue（保存・状態変更の操作）を取得する。 */ (s) => s.createIssue)
-  const updateIssue = useDataStore(/* ストアからupdateIssue（保存・状態変更の操作）を取得する。 */ (s) => s.updateIssue)
-  const deleteIssue = useDataStore(/* ストアからdeleteIssue（保存・状態変更の操作）を取得する。 */ (s) => s.deleteIssue)
-  const moveIssue = useDataStore(/* ストアからmoveIssue（保存・状態変更の操作）を取得する。 */ (s) => s.moveIssue)
-  const stopRecurrence = useDataStore(/* ストアからstopRecurrence（保存・状態変更の操作）を取得する。 */ (s) => s.stopRecurrence)
-  const recurrenceRule = useDataStore(/* Issueの繰り返しIDに一致するルールをストアから取り出す。 */ (s) => s.recurrenceRules.find(/* 指定IDと一致という条件を最初に満たす要素を探す。 */ (rule) => rule.id === issue?.recurrenceId))
-  const issues = useDataStore(/* ストアからIssueを取得する。 */ (s) => s.issues)
+  const workflow = useDataStore((s) => (project ? s.workflows[project.workflowId] : undefined))
+  const defaultDuration = useDataStore((s) => s.settings.defaultDuration)
+  const createIssue = useDataStore((s) => s.createIssue)
+  const updateIssue = useDataStore((s) => s.updateIssue)
+  const deleteIssue = useDataStore((s) => s.deleteIssue)
+  const moveIssue = useDataStore((s) => s.moveIssue)
+  const stopRecurrence = useDataStore((s) => s.stopRecurrence)
+  const recurrenceRule = useDataStore((s) => s.recurrenceRules.find((rule) => rule.id === issue?.recurrenceId))
+  const issues = useDataStore((s) => s.issues)
   // 並び順は同じステータス・同じ対象月の中で扱う。
   const column = useMemo(
     () =>
       issue
-        ? issues.filter(/* 同じ月とステータスのタスクを取り出す。 */ (i) => i.statusId === issue.statusId && issueMonth(i) === issueMonth(issue))
+        ? issues.filter((i) => i.statusId === issue.statusId && issueMonth(i) === issueMonth(issue))
         : [],
     [issues, issue],
   )
-  const position = issue ? column.findIndex(/* 指定IDと一致という条件を最初に満たす要素の位置を探す。 */ (i) => i.id === issue.id) : -1
+  const position = issue ? column.findIndex((i) => i.id === issue.id) : -1
 
   const [title, setTitle] = useState(issue?.title ?? '')
   const [description, setDescription] = useState(issue?.description ?? '')
+  const [labels, setLabels] = useState<string[]>(issue?.labels ?? [])
+  const [labelDraft, setLabelDraft] = useState('')
+  const [showDelete, setShowDelete] = useState(false)
   const [type, setType] = useState<IssueType>(issue?.type ?? 'task')
   const [priority, setPriority] = useState<Priority>(issue?.priority ?? 'medium')
   const [statusId, setStatusId] = useState(
@@ -62,7 +65,6 @@ export function IssueEditor({
   const [reminderOffsetMin, setReminderOffsetMin] = useState<number | null>(issue ? issue.reminderOffsetMin : 0)
   const [recurrence, setRecurrence] = useState<RecurrenceFrequency | ''>(recurrenceRule?.frequency ?? '')
   const [recurrenceInterval, setRecurrenceInterval] = useState(String(recurrenceRule?.interval ?? 1))
-  /** 保存済みの繰り返し曜日を初期値にし、未設定なら予定日または今日の曜日を選ぶ。 */
   const [recurrenceWeekdays, setRecurrenceWeekdays] = useState<number[]>(() =>
     recurrenceRule?.weekdays ?? [new Date(`${date || todayStr()}T00:00:00`).getDay()],
   )
@@ -70,11 +72,12 @@ export function IssueEditor({
   const [error, setError] = useState<string | null>(null)
   const [childTitle, setChildTitle] = useState('')
   const [addingChild, setAddingChild] = useState(false)
+  // 元の入力内容を失わないよう、関連タスクは別の編集画面で開く。
   const [relatedIssueId, setRelatedIssueId] = useState<string | null>(null)
   const relatedIssue = issues.find((item) => item.id === relatedIssueId)
   const issueId = issue?.id
 
-  /** 親候補に自分の子孫を出さないため、子Issueをたどって全子孫のIDを集める。 */
+  /* 親子関係の循環を防ぐため、自分と子孫は親候補に含めない。 */
   const descendants = useMemo(() => {
     const found = new Set<string>()
     if (!issueId) return found
@@ -90,11 +93,10 @@ export function IssueEditor({
     }
     return found
   }, [issues, issueId])
-  const parentOptions = issues.filter(/* 自分と子孫を親候補から除外・操作対象のIDを除外という条件を満たす要素だけを残す。 */ (i) => i.id !== issueId && !descendants.has(i.id))
-  const children = issueId ? issues.filter(/* 指定の親Issueと一致という条件を満たす要素だけを残す。 */ (i) => i.parentId === issueId) : []
+  const parentOptions = issues.filter((i) => i.id !== issueId && !descendants.has(i.id))
+  const children = issueId ? issues.filter((i) => i.parentId === issueId) : []
   const isRoutine = workflow?.statuses.find((status) => status.id === statusId)?.category === 'routine'
 
-  /** 編集中のIssueを同じステータス・対象月の中で1つ上または下へ移動する。 */
   async function reorder(delta: -1 | 1) {
     if (!issue) return
     try {
@@ -104,7 +106,6 @@ export function IssueEditor({
     }
   }
 
-  /** 指定された保存・削除処理を実行して成功時に編集画面を閉じ、失敗時はエラーを表示する。 */
   async function run(action: () => Promise<unknown>) {
     try {
       await action()
@@ -114,7 +115,6 @@ export function IssueEditor({
     }
   }
 
-  /** 入力されたタイトルで編集中Issueの子タスクを作り、成功時に入力欄を空にする。処理中の重複登録を防ぐ。 */
   async function addChild() {
     if (!issue || !childTitle.trim() || addingChild) return
     setAddingChild(true)
@@ -128,7 +128,6 @@ export function IssueEditor({
     }
   }
 
-  /** 対象月・時刻・繰り返し曜日を確認し、新規作成または編集内容を保存する。 */
   function onSubmit(e: FormEvent) {
     e.preventDefault()
     if (!isValidMonth(planningMonth)) { setError('対象月を選択してください'); return }
@@ -143,6 +142,7 @@ export function IssueEditor({
     }
     const scheduleChanged = !issue || issue.date !== (date || null) || issue.startMin !== startMin
     const common = {
+      labels: appendIssueLabel(labels, labelDraft),
       title,
       description: description || undefined,
       type,
@@ -157,7 +157,7 @@ export function IssueEditor({
       planningMonth,
       sprintId: null,
     }
-    void run(/* 入力した対象月と各項目・繰り返し設定を保存する。 */ async () => {
+    void run(async () => {
       if (!issue) {
         await createIssue({
           ...common,
@@ -193,7 +193,7 @@ export function IssueEditor({
         aria-modal="true"
         aria-label={issue ? 'Issueを編集' : 'Issueを作成'}
         onSubmit={onSubmit}
-        onClick={/* クリックが背景へ伝わってダイアログを閉じないようにする。 */ (e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
         className="mx-auto flex max-h-[90%] w-full max-w-xl flex-col gap-3 overflow-y-auto rounded-t-2xl bg-surface p-4"
         style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 16px)' }}
       >
@@ -201,15 +201,42 @@ export function IssueEditor({
           {issue ? formatIssueNumber(issue.number) : '新規タスク'}
         </h2>
 
+
+
         <label className="flex flex-col gap-1 text-sm text-muted">
           タイトル
           <input
             className={FIELD}
             value={title}
-            onChange={/* 入力された値に合わせてタイトルを更新する。 */ (e) => setTitle(e.target.value)}
+            onChange={(e) => setTitle(e.target.value)}
             autoFocus={!issue}
           />
         </label>
+
+        <fieldset className="flex flex-col gap-2 rounded-lg border border-border p-3">
+          <legend className="px-1 text-sm font-semibold text-muted">ラベル</legend>
+          <div className="flex gap-2">
+            <input aria-label="追加するラベル" className={`${FIELD} min-w-0 flex-1`} value={labelDraft} placeholder="仕事・買い物など"
+              onChange={(event) => setLabelDraft(event.target.value)}
+              onKeyDown={(event) => {
+                // IMEの変換確定をラベル追加として扱わない。
+                if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
+                  event.preventDefault()
+                  setLabels(appendIssueLabel(labels, labelDraft))
+                  setLabelDraft('')
+                }
+              }} />
+            <button type="button" disabled={!labelDraft.trim()} className="min-h-11 rounded-lg border border-border px-3 text-sm disabled:opacity-40"
+              onClick={() => { setLabels(appendIssueLabel(labels, labelDraft)); setLabelDraft('') }}>追加</button>
+          </div>
+          {labels.length > 0 && <ul className="flex flex-wrap gap-2">
+            {labels.map((label, index) => <li key={`${index}-${label}`} className="flex max-w-full items-center gap-1 rounded-lg bg-surface-2 pl-3 text-sm">
+              <span className="break-words">{label}</span>
+              <button type="button" aria-label={`${label}のラベルを削除`} className="min-h-11 min-w-11 shrink-0"
+                onClick={() => setLabels(labels.filter((_, labelIndex) => labelIndex !== index))}>×</button>
+            </li>)}
+          </ul>}
+        </fieldset>
 
         <fieldset className="flex flex-col gap-2 rounded-lg border border-border p-3">
             <legend className="px-1 text-sm font-semibold text-muted">繰り返し</legend>
@@ -219,7 +246,7 @@ export function IssueEditor({
                 <select
                   className={FIELD}
                   value={recurrence}
-                  onChange={/* 入力された値に合わせて繰り返し頻度を更新する。 */ (e) => setRecurrence(e.target.value as RecurrenceFrequency | '')}
+                  onChange={(e) => setRecurrence(e.target.value as RecurrenceFrequency | '')}
                 >
                   <option value="">繰り返さない</option>
                   <option value="daily">毎日</option>
@@ -238,7 +265,7 @@ export function IssueEditor({
                       min={1}
                       max={365}
                       value={recurrenceInterval}
-                      onChange={/* 入力された値に合わせて繰り返し間隔を更新する。 */ (e) => setRecurrenceInterval(e.target.value)}
+                      onChange={(e) => setRecurrenceInterval(e.target.value)}
                     />
                     <span>{recurrence === 'daily' ? '日' : recurrence === 'weekly' ? '週' : 'か月'}</span>
                   </span>
@@ -248,18 +275,18 @@ export function IssueEditor({
                 <div className="col-span-2 flex flex-col gap-1 text-sm text-muted">
                   <span>曜日（複数選択可）</span>
                   <div className="grid grid-cols-7 gap-1" role="group" aria-label="繰り返す曜日">
-                    {WEEKDAY_LABELS.map(/* 各曜日の選択肢の表示要素を作り、対応する選択・編集操作を結び付ける。 */ (label, weekday) => {
+                    {WEEKDAY_LABELS.map((label, weekday) => {
                       const selected = recurrenceWeekdays.includes(weekday)
                       return (
                         <button
                           key={weekday}
                           type="button"
                           aria-pressed={selected}
-                          onClick={/* クリックした曜日を選択一覧へ追加または削除し、曜日順に並べる。 */ () =>
-                            setRecurrenceWeekdays(/* 選択済みの曜日は除き、未選択の曜日は追加して曜日順に並べる。 */ (current) =>
+                          onClick={() =>
+                            setRecurrenceWeekdays((current) =>
                               selected
-                                ? current.filter(/* クリックした曜日を選択済み曜日の一覧から取り除く。 */ (day) => day !== weekday)
-                                : [...current, weekday].sort(/* 数値を比較し、小さい値から順に並べる。 */ (a, b) => a - b),
+                                ? current.filter((day) => day !== weekday)
+                                : [...current, weekday].sort((a, b) => a - b),
                             )
                           }
                           className={`min-h-11 rounded-lg border text-sm ${selected ? 'border-accent bg-accent text-accent-text' : 'border-border bg-surface-2'}`}
@@ -279,7 +306,7 @@ export function IssueEditor({
                     className={FIELD}
                     min={date || undefined}
                     value={recurrenceEndDate}
-                    onChange={/* 入力された値に合わせて繰り返し終了日を更新する。 */ (e) => setRecurrenceEndDate(e.target.value)}
+                    onChange={(e) => setRecurrenceEndDate(e.target.value)}
                   />
                 </label>
               )}
@@ -294,7 +321,7 @@ export function IssueEditor({
               <button
                 type="button"
                 className="min-h-11 rounded-lg border border-border px-3 text-sm"
-                onClick={/* 繰り返し停止を実行し、成功時に編集画面を閉じる。 */ () => void run(/* 対象Issueの繰り返しルールを無効にする処理を呼び出す。 */ () => stopRecurrence(recurrenceRule.id))}
+                onClick={() => void run(() => stopRecurrence(recurrenceRule.id))}
               >
                 この繰り返しを停止
               </button>
@@ -306,15 +333,15 @@ export function IssueEditor({
           <textarea
             className={`${FIELD} min-h-24 py-2`}
             value={description}
-            onChange={/* 入力された値に合わせて説明を更新する。 */ (e) => setDescription(e.target.value)}
+            onChange={(e) => setDescription(e.target.value)}
           />
         </label>
 
         <div className="grid grid-cols-2 gap-3">
           <label className="flex flex-col gap-1 text-sm text-muted">
             種別
-            <select className={FIELD} value={type} onChange={/* 入力された値に合わせてIssueの種別を更新する。 */ (e) => setType(e.target.value as IssueType)}>
-              {ISSUE_TYPES.map(/* 各Issueの種別の表示要素を作り、対応する選択・編集操作を結び付ける。 */ (t) => (
+            <select className={FIELD} value={type} onChange={(e) => setType(e.target.value as IssueType)}>
+              {ISSUE_TYPES.map((t) => (
                 <option key={t}>{t}</option>
               ))}
             </select>
@@ -324,17 +351,17 @@ export function IssueEditor({
             <select
               className={FIELD}
               value={priority}
-              onChange={/* 入力された値に合わせて優先度を更新する。 */ (e) => setPriority(e.target.value as Priority)}
+              onChange={(e) => setPriority(e.target.value as Priority)}
             >
-              {PRIORITIES.map(/* 各優先度の選択肢の表示要素を作り、対応する選択・編集操作を結び付ける。 */ (p) => (
+              {PRIORITIES.map((p) => (
                 <option key={p} value={p}>{PRIORITY_LABELS[p]}</option>
               ))}
             </select>
           </label>
           <label className="flex flex-col gap-1 text-sm text-muted">
             ステータス
-            <select className={FIELD} value={statusId} onChange={/* 入力された値に合わせてステータスIDを更新する。 */ (e) => setStatusId(e.target.value)}>
-              {workflow?.statuses.map(/* 各ステータスの表示要素を作り、対応する選択・編集操作を結び付ける。 */ (s) => (
+            <select className={FIELD} value={statusId} onChange={(e) => setStatusId(e.target.value)}>
+              {workflow?.statuses.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
                 </option>
@@ -344,7 +371,7 @@ export function IssueEditor({
           <label className="flex flex-col gap-1 text-sm text-muted">
             対象月
             <input type="month" className={FIELD} value={planningMonth}
-              onChange={/* 対象月を変えたとき、別の月にある時刻配置は解除する。 */ (event) => {
+              onChange={(event) => {
                 const month = event.target.value
                 setPlanningMonth(month)
                 if (date && date.slice(0, 7) !== month) { setDate(''); setStartTime('') }
@@ -352,23 +379,23 @@ export function IssueEditor({
           </label>
           <label className="flex flex-col gap-1 text-sm text-muted">
             親Issue / Epic
-            <select className={FIELD} value={parentId ?? ''} onChange={/* 入力された値に合わせて親IssueのIDを更新する。 */ (e) => setParentId(e.target.value || null)}>
+            <select className={FIELD} value={parentId ?? ''} onChange={(e) => setParentId(e.target.value || null)}>
               <option value="">なし</option>
-              {parentOptions.map(/* 各親Issueの候補の表示要素を作り、対応する選択・編集操作を結び付ける。 */ (parent) => (
+              {parentOptions.map((parent) => (
                 <option key={parent.id} value={parent.id}>
                   {parent.type === 'epic' ? 'Epic' : parent.type} · {formatIssueNumber(parent.number)} · {parent.title}
                 </option>
               ))}
             </select>
             {parentId && <button type="button" className="min-h-11 text-left text-xs text-accent"
-              onClick={/* 親の編集を重ねて開き、戻ったときは入力中の内容を保持する。 */ () => setRelatedIssueId(parentId)}>親タスクを編集</button>}
+              onClick={() => setRelatedIssueId(parentId)}>親タスクを編集</button>}
           </label>
           <label className="col-span-2 flex flex-col gap-1 text-sm text-muted">
             通知
             <select
               className={FIELD}
               value={reminderOffsetMin === null ? 'none' : String(reminderOffsetMin)}
-              onChange={/* 入力された値に合わせて通知タイミングを更新する。 */ (e) => setReminderOffsetMin(e.target.value === 'none' ? null : Number(e.target.value))}
+              onChange={(e) => setReminderOffsetMin(e.target.value === 'none' ? null : Number(e.target.value))}
             >
               <option value="none">通知しない</option>
               <option value="0">予定時刻</option>
@@ -385,7 +412,7 @@ export function IssueEditor({
               type="date"
               className={FIELD}
               value={dueDate}
-              onChange={/* 入力された値に合わせて期限を更新する。 */ (e) => setDueDate(e.target.value)}
+              onChange={(e) => setDueDate(e.target.value)}
             />
           </label>
         </div>
@@ -395,7 +422,7 @@ export function IssueEditor({
           <div className="grid grid-cols-3 gap-2">
             <label className="col-span-3 flex flex-col gap-1 text-sm text-muted sm:col-span-1">
               日付
-              <input type="date" className={FIELD} value={date} onChange={/* 予定日を変えたら対象月も同じ月に合わせる。 */ (e) => { setDate(e.target.value); if (e.target.value) setPlanningMonth(e.target.value.slice(0, 7)) }} />
+              <input type="date" className={FIELD} value={date} onChange={(e) => { setDate(e.target.value); if (e.target.value) setPlanningMonth(e.target.value.slice(0, 7)) }} />
             </label>
             <label className="flex flex-col gap-1 text-sm text-muted">
               開始時刻
@@ -404,7 +431,7 @@ export function IssueEditor({
                 step={300}
                 className={FIELD}
                 value={startTime}
-                onChange={/* 入力された値に合わせて開始時刻を更新する。 */ (e) => setStartTime(e.target.value)}
+                onChange={(e) => setStartTime(e.target.value)}
               />
             </label>
             <label className="flex flex-col gap-1 text-sm text-muted">
@@ -416,14 +443,14 @@ export function IssueEditor({
                 step={5}
                 className={FIELD}
                 value={duration}
-                onChange={/* 入力された値に合わせて所要時間を更新する。 */ (e) => setDuration(e.target.value)}
+                onChange={(e) => setDuration(e.target.value)}
               />
             </label>
           </div>
           <button
             type="button"
             disabled={!startTime}
-            onClick={/* 操作内容に合わせて開始時刻を更新する。 */ () => setStartTime('')}
+            onClick={() => setStartTime('')}
             className="min-h-11 rounded-lg border border-border text-sm disabled:opacity-40"
           >
             未配置に戻す(時刻をクリア)
@@ -439,12 +466,12 @@ export function IssueEditor({
             {children.length > 0 && <p className="text-xs text-muted">親のステータスは子タスクの進捗に連動します。子タスクを押すと編集できます。</p>}
             {children.length > 0 ? (
               <ul className="flex flex-col gap-1">
-                {children.map(/* 各子Issueの表示要素を作り、対応する選択・編集操作を結び付ける。 */ (child) => (
+                {children.map((child) => (
                   <li key={child.id} className="flex items-center gap-2 rounded-lg bg-surface-2 px-3 py-2 text-sm">
                     <span className="shrink-0 text-xs text-muted">{child.type === 'epic' ? 'Epic' : child.type} · {formatIssueNumber(child.number)}</span>
                     <button type="button" aria-label={`${child.title}を編集`} className="min-h-11 min-w-0 flex-1 truncate text-left text-accent"
-                      onClick={/* 子の編集を重ねて開き、閉じると親の入力内容へ戻る。 */ () => setRelatedIssueId(child.id)}>{child.title}</button>
-                    <span className="shrink-0 text-xs text-muted">{workflow?.statuses.find(/* 指定IDと一致という条件を最初に満たす要素を探す。 */ (s) => s.id === child.statusId)?.name}</span>
+                      onClick={() => setRelatedIssueId(child.id)}>{child.title}</button>
+                    <span className="shrink-0 text-xs text-muted">{workflow?.statuses.find((s) => s.id === child.statusId)?.name}</span>
                   </li>
                 ))}
               </ul>
@@ -457,8 +484,8 @@ export function IssueEditor({
                 className={`${FIELD} min-w-0 flex-1`}
                 placeholder="サブタスクを追加"
                 value={childTitle}
-                onChange={/* 入力された値に合わせて子タスクのタイトルを更新する。 */ (e) => setChildTitle(e.target.value)}
-                onKeyDown={/* Enterまたはスペースで対象Issueを開き、キーボードからも編集できるようにする。 */ (e) => {
+                onChange={(e) => setChildTitle(e.target.value)}
+                onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault()
                     void addChild()
@@ -468,7 +495,7 @@ export function IssueEditor({
               <button
                 type="button"
                 disabled={!childTitle.trim() || addingChild}
-                onClick={/* 入力されたタイトルで子タスクを追加する。 */ () => void addChild()}
+                onClick={() => void addChild()}
                 className="min-h-11 shrink-0 rounded-lg border border-border px-3 text-sm disabled:opacity-40"
               >
                 追加
@@ -486,7 +513,7 @@ export function IssueEditor({
               type="button"
               aria-label="列内で上へ移動"
               disabled={position <= 0}
-              onClick={/* 編集中のIssueを同じ列内で1つ上へ移す。 */ () => void reorder(-1)}
+              onClick={() => void reorder(-1)}
               className="min-h-11 min-w-11 rounded-lg border border-border disabled:opacity-40"
             >
               ↑
@@ -495,7 +522,7 @@ export function IssueEditor({
               type="button"
               aria-label="列内で下へ移動"
               disabled={position < 0 || position >= column.length - 1}
-              onClick={/* 編集中のIssueを同じ列内で1つ下へ移す。 */ () => void reorder(1)}
+              onClick={() => void reorder(1)}
               className="min-h-11 min-w-11 rounded-lg border border-border disabled:opacity-40"
             >
               ↓
@@ -514,9 +541,7 @@ export function IssueEditor({
             <button
               type="button"
               className="min-h-11 rounded-lg border border-red-500 px-4 text-sm text-red-500"
-              onClick={/* 対象Issueと子孫の削除を実行し、結果に応じて編集画面を閉じるかエラーを表示する。 */ () => {
-                if (confirm('このIssueと子タスクを削除しますか?')) void run(/* 対象Issueと子孫の削除処理を呼び出す。 */ () => deleteIssue(issue.id))
-              }}
+              onClick={() => setShowDelete(true)}
             >
               削除
             </button>
@@ -537,8 +562,12 @@ export function IssueEditor({
         </div>
       </form>
     </div>
+    {showDelete && issue && <DeleteIssueDialog title={issue.title} descendantCount={descendants.size}
+      onDelete={() => deleteIssue(issue.id)}
+      onClose={() => setShowDelete(false)}
+      onDeleted={onClose} />}
     {relatedIssue && <IssueEditor key={relatedIssue.id} issue={relatedIssue}
-      onClose={/* 関連タスクの編集を閉じて元の編集画面に戻す。 */ () => setRelatedIssueId(null)} />}
+      onClose={() => setRelatedIssueId(null)} />}
     </>
   )
 }

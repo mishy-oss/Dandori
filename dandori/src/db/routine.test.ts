@@ -6,13 +6,11 @@ import { createIssue, getIssue, listIssues, moveIssue, updateIssue } from './iss
 import { useDataStore } from '../store/data'
 import type { Workflow } from './types'
 
-/** 保存データと画面ストアを初期化し、各テストを独立させる。 */
 beforeEach(async () => {
   await Promise.all([db.projects.clear(), db.workflows.clear(), db.issues.clear(), db.recurrenceRules.clear(), db.monthlySnapshots.clear(), db.settings.clear()])
   useDataStore.setState(useDataStore.getInitialState(), true)
 })
 
-/** 定期タスクと通常タスクを比較するためにワークフローを用意する。 */
 async function setup() {
   const project = await createProject({ key: 'APP', name: 'App' })
   const workflow = (await getWorkflow(project.workflowId))!
@@ -23,7 +21,6 @@ async function setup() {
   return { project, workflow, routine, doing, todo, done }
 }
 
-/** 日時を指定しても、未配置に戻しても、定期タスクの列を維持する。 */
 it('keeps fixed appointments in their own status without a WIP limit', async () => {
   const { project, routine } = await setup()
   expect(routine.wipLimit).toBeUndefined()
@@ -34,7 +31,6 @@ it('keeps fixed appointments in their own status without a WIP limit', async () 
   expect((await updateIssue(meeting.id, { startMin: 600 })).statusId).toBe(routine.id)
 })
 
-/** 毎週の予定をまとめて生成し、完了後に生成される次回分も定期タスクとして扱う。 */
 it('keeps monthly expansion and next occurrences in the routine status', async () => {
   const { project, routine, done } = await setup()
   const meeting = await createIssue({ projectId: project.id, title: '週次会議', statusId: routine.id, planningMonth: '2027-01', date: '2027-01-04', startMin: 600,
@@ -48,7 +44,6 @@ it('keeps monthly expansion and next occurrences in the routine status', async (
   expect(next).toMatchObject({ statusId: routine.id, isRoutine: true, startMin: 600, completedAt: null })
 })
 
-/** ボードから定期タスクへ移動した場合も、完了・再開で分類を保持する。 */
 it('restores routine status when a completed appointment is reopened', async () => {
   const { project, workflow, routine, done, todo } = await setup()
   const issue = await createIssue({ projectId: project.id, title: '会議', date: '2027-01-04', startMin: 600 })
@@ -61,7 +56,6 @@ it('restores routine status when a completed appointment is reopened', async () 
   expect(await updateIssue(issue.id, { statusId: todo.id })).toMatchObject({ statusId: todo.id, isRoutine: false })
 })
 
-/** 定期タスクの子も進捗として親へ伝え、親が定期タスクなら専用列を保持する。 */
 it('includes routine children in parent progress', async () => {
   const { project, routine, doing, done } = await setup()
   const parent = await createIssue({ projectId: project.id, title: '準備' })
@@ -71,7 +65,6 @@ it('includes routine children in parent progress', async () => {
   expect((await getIssue(parent.id))?.statusId).toBe(done.id)
 })
 
-/** 旧DBの列やIDを保ったまま追加し、既にある定期タスク列は重複させない。 */
 it('upgrades existing workflows without replacing or duplicating statuses', async () => {
   const name = `routine-migration-${Date.now()}`
   const legacy = new Dexie(name)
@@ -96,7 +89,6 @@ it('upgrades existing workflows without replacing or duplicating statuses', asyn
   }
 })
 
-/** すでにバージョン7を利用した環境でも、IDを保って既定名だけを変更する。 */
 it('renames existing routine statuses while preserving custom names and IDs', async () => {
   const name = `routine-rename-${Date.now()}`
   const legacy = new Dexie(name)
@@ -118,7 +110,6 @@ it('renames existing routine statuses while preserving custom names and IDs', as
   }
 })
 
-/** 旧順序の既存ワークフローを、タスクが参照する列のIDを変えずに並べ替える。 */
 it('orders existing statuses as todo, doing, recurring and done', async () => {
   const name = `routine-order-${Date.now()}`
   const legacy = new Dexie(name)

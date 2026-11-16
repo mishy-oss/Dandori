@@ -2,7 +2,6 @@ import { useRegisterSW } from 'virtual:pwa-register/react'
 import { useEffect, useState } from 'react'
 import { fetchUpdateNotes, formatCommitDate, type UpdateNotes } from './updateNotes'
 
-/** Service Workerの更新待ちとオフライン利用の準備完了を通知し、更新・閉じる操作を受け付ける。 */
 export function PwaToast() {
   const {
     needRefresh: [needRefresh, setNeedRefresh],
@@ -11,7 +10,6 @@ export function PwaToast() {
   } = useRegisterSW()
   const [notes, setNotes] = useState<UpdateNotes | 'error' | null>(null)
 
-  /** 更新待ちになったときだけ変更内容を読み込み、閉じた際や8秒経過後は通信を中止する。 */
   useEffect(() => {
     if (!needRefresh) return
     const controller = new AbortController()
@@ -26,7 +24,6 @@ export function PwaToast() {
 
   if (!needRefresh && !offlineReady) return null
 
-  /** 更新案内とオフライン利用案内の両方を非表示にする。 */
   const close = () => {
     setNeedRefresh(false)
     setOfflineReady(false)
@@ -35,7 +32,7 @@ export function PwaToast() {
 
   return (
     <div
-      role="のステータス"
+      role="status"
       className="fixed inset-x-4 z-50 mx-auto flex max-h-[60dvh] max-w-xl flex-col gap-3 overflow-y-auto rounded-xl border border-border bg-surface p-3 shadow-lg"
       style={{ bottom: 'calc(env(safe-area-inset-bottom) + 72px)' }}
     >
@@ -59,7 +56,7 @@ export function PwaToast() {
       {needRefresh && (
         <button
           className="min-h-11 rounded-lg bg-accent px-4 text-sm font-semibold text-accent-text"
-          onClick={/* 待機中のService Workerを有効化して、アプリを新しいバージョンへ更新する。 */ () => updateServiceWorker(true)}
+          onClick={() => updateServiceWorker(true)}
         >
           更新
         </button>
