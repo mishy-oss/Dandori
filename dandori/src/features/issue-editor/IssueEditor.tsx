@@ -62,6 +62,7 @@ export function IssueEditor({
   const startInit = issue ? issue.startMin : (initialSchedule?.startMin ?? null)
   const [startTime, setStartTime] = useState(startInit === null ? '' : formatMin(startInit))
   const [duration, setDuration] = useState(String(issue?.durationMin ?? defaultDuration))
+  const [calendarAllDay, setCalendarAllDay] = useState(!!issue?.calendarAllDay)
   const [reminderOffsetMin, setReminderOffsetMin] = useState<number | null>(issue ? issue.reminderOffsetMin : 0)
   const [recurrence, setRecurrence] = useState<RecurrenceFrequency | ''>(recurrenceRule?.frequency ?? '')
   const [recurrenceInterval, setRecurrenceInterval] = useState(String(recurrenceRule?.interval ?? 1))
@@ -131,8 +132,9 @@ export function IssueEditor({
   function onSubmit(e: FormEvent) {
     e.preventDefault()
     if (!isValidMonth(planningMonth)) { setError('対象月を選択してください'); return }
-    const startMin = startTime ? parseTime(startTime) : null
-    if (startTime && startMin === null) {
+    if (calendarAllDay && !date) { setError('終日予定の日付を指定してください'); return }
+    const startMin = calendarAllDay ? null : startTime ? parseTime(startTime) : null
+    if (!calendarAllDay && startTime && startMin === null) {
       setError('開始時刻が正しくありません')
       return
     }
@@ -152,7 +154,8 @@ export function IssueEditor({
       dueDate: dueDate || null,
       date: date || null,
       startMin,
-      durationMin: Number(duration),
+      durationMin: calendarAllDay ? 1440 : Number(duration),
+      calendarAllDay,
       reminderOffsetMin,
       planningMonth,
       sprintId: null,
@@ -238,8 +241,9 @@ export function IssueEditor({
           </ul>}
         </fieldset>
 
-        <fieldset className="flex flex-col gap-2 rounded-lg border border-border p-3">
+        <fieldset disabled={!!issue?.calendarSeriesId} className="flex flex-col gap-2 rounded-lg border border-border p-3">
             <legend className="px-1 text-sm font-semibold text-muted">繰り返し</legend>
+            {issue?.calendarSeriesId && <p className="text-xs text-muted">Googleカレンダーの繰り返し予定です。曜日などのルールはGoogle側で変更してください。ここでは1回分を編集します。</p>}
             <div className="grid grid-cols-2 gap-2">
               <label className="flex flex-col gap-1 text-sm text-muted">
                 頻度
@@ -419,6 +423,8 @@ export function IssueEditor({
 
         <fieldset className="flex flex-col gap-2 rounded-lg border border-border p-3">
           <legend className="px-1 text-sm font-semibold text-muted">スケジュール（タイムライン）</legend>
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={calendarAllDay} onChange={event => { setCalendarAllDay(event.target.checked); if (!event.target.checked && duration === '1440') setDuration('30') }} />終日予定</label>
+          {issue?.calendarReadOnly && <p className="text-xs text-muted">招待者のいるGoogleの予定です。ここでの変更はアプリ内だけに保存されます。</p>}
           <div className="grid grid-cols-3 gap-2">
             <label className="col-span-3 flex flex-col gap-1 text-sm text-muted sm:col-span-1">
               日付
@@ -428,7 +434,8 @@ export function IssueEditor({
               開始時刻
               <input
                 type="time"
-                step={300}
+                disabled={calendarAllDay}
+                step={issue?.calendarSource ? 60 : 300}
                 className={FIELD}
                 value={startTime}
                 onChange={(e) => setStartTime(e.target.value)}
@@ -438,19 +445,20 @@ export function IssueEditor({
               所要(分)
               <input
                 type="number"
+                disabled={calendarAllDay}
                 inputMode="numeric"
                 min={5}
-                step={5}
+                step={issue?.calendarSource ? 1 : 5}
                 className={FIELD}
-                value={duration}
+                value={calendarAllDay ? '1440' : duration}
                 onChange={(e) => setDuration(e.target.value)}
               />
             </label>
           </div>
           <button
             type="button"
-            disabled={!startTime}
-            onClick={() => setStartTime('')}
+            disabled={!startTime && !calendarAllDay}
+            onClick={() => { setStartTime(''); setCalendarAllDay(false); if (duration === '1440') setDuration('30') }}
             className="min-h-11 rounded-lg border border-border text-sm disabled:opacity-40"
           >
             未配置に戻す(時刻をクリア)

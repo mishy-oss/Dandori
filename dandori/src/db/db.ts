@@ -1,5 +1,7 @@
 import Dexie, { type EntityTable } from 'dexie'
 import { newId } from '../lib/id'
+import { activeDatabaseName } from '../features/account/accountIdentity'
+import type { SyncData } from '../features/account/syncModel'
 import type { Issue, Project, RecurrenceRule, Settings, Sprint, Workflow, MonthlySnapshot } from './types'
 
 export class DandoriDB extends Dexie {
@@ -10,6 +12,7 @@ export class DandoriDB extends Dexie {
   sprints!: EntityTable<Sprint, 'id'>
   settings!: EntityTable<Settings, 'id'>
   monthlySnapshots!: EntityTable<MonthlySnapshot, 'id'>
+  accountSync!: EntityTable<{ id: string; revision: number; baseline: SyncData; lastSyncedAt: number }, 'id'>
 
   constructor(name = 'dandori') {
     super(name)
@@ -80,7 +83,8 @@ export class DandoriDB extends Dexie {
         if (changed) workflow.updatedAt = Date.now()
       })
     })
+    this.version(11).stores({ accountSync: 'id' })
   }
 }
 
-export const db = new DandoriDB()
+export const db = new DandoriDB(activeDatabaseName())

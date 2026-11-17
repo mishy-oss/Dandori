@@ -8,6 +8,8 @@ import { PwaToast } from './PwaToast'
 import { useThemeEffect } from './useThemeEffect'
 import { useMonthlyPlanningEffect } from './useMonthlyPlanningEffect'
 import { Icon } from './Icon'
+import { initializeAccount, prepareAccountCache, useAccountStore } from '../features/account/accountStore'
+import { useAccountSync } from '../features/account/useAccountSync'
 import { readPushDeviceToken, syncPushSchedules, PUSH_SETTINGS_CHANGED_EVENT } from '../features/notifications/pushClient'
 
 const TABS = [
@@ -22,13 +24,17 @@ type TabId = (typeof TABS)[number]['id']
 export function App() {
   useThemeEffect()
   useMonthlyPlanningEffect()
+  useAccountSync()
+  const [startupError, setStartupError] = useState<string | null>(null)
+  const accountError = useAccountStore(state => state.error || state.calendarError)
   const init = useDataStore((s) => s.init)
   const ready = useDataStore((s) => s.ready)
   const issues = useDataStore((s) => s.issues)
   const workflows = useDataStore((s) => s.workflows)
   const projects = useDataStore((s) => s.projects)
   useEffect(() => {
-    void init()
+    // 認証サーバーを待たず、保存済みのタスクを先に表示してオフライン起動を維持する。
+    void prepareAccountCache().then(init).then(initializeAccount).catch(error => setStartupError(error instanceof Error ? error.message : String(error)))
   }, [init])
   useEffect(() => {
     if (!ready) return
@@ -65,7 +71,7 @@ export function App() {
       window.removeEventListener(PUSH_SETTINGS_CHANGED_EVENT, sync)
     }
   }, [ready, issues, workflows, projects])
-  const [tab, setTab] = useState<TabId>('today')
+  const [tab, setTab] = useState<TabId>(() => new URLSearchParams(location.search).has('google') ? 'settings' : 'today')
   const Active = TABS.find((t) => t.id === tab)!.Screen
 
   return (
@@ -74,6 +80,8 @@ export function App() {
       style={{ paddingTop: 'env(safe-area-inset-top)' }}
     >
       <main className={`min-h-0 flex-1 overflow-y-auto ${tab === 'today' ? '' : 'pb-24'}`}>
+        {startupError && <p role="alert" className="p-3 text-sm text-red-500">{startupError}</p>}
+        {accountError && tab !== 'settings' && <button className="w-full p-2 text-left text-xs text-red-500" onClick={() => setTab('settings')}>Google連携を確認してください：{accountError}</button>}
         <Active />
       </main>
 

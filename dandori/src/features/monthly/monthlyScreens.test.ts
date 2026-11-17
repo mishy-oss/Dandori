@@ -49,6 +49,8 @@ it('uses Japanese headings while preserving English option values', () => {
     expect(settings).toContain('システム')
     expect(settings).toContain('迷ったらtaskで大丈夫です。')
     expect(settings).toContain('JSONを準備')
+    expect(settings).toContain('Googleアカウントと同期')
+    expect(settings).toContain('Googleでログイン')
     const timeline = renderToStaticMarkup(createElement(TimelineScreen))
     expect(timeline).toContain('今日へ')
     const editor = renderToStaticMarkup(createElement(IssueEditor, { issue: null, onClose: () => {} }))
@@ -57,6 +59,7 @@ it('uses Japanese headings while preserving English option values', () => {
     expect(editor).toContain('タイトル')
     expect(editor).toContain('キャンセル')
     expect(editor).toContain('aria-label="追加するラベル"')
+    expect(editor).toContain('終日予定')
     for (const value of ['task', 'bug', 'story', 'epic', 'urgent', 'highest', 'high', 'medium', 'low', 'To Do', 'Done']) {
       expect(editor).toContain(`>${value}</option>`)
     }

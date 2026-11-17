@@ -32,8 +32,10 @@ it('preserves all saved data and relationships through JSON serialization', asyn
   await updateSettings({ lastBackupAt: 123, defaultDuration: 45 })
   const backup = JSON.parse(JSON.stringify(await createBackup('system')))
   for (const table of db.tables) {
+    if (table.name === 'accountSync') continue
     expect(backup.data[table.name]).toEqual(await table.toArray())
   }
+  expect(backup.data).not.toHaveProperty('accountSync')
   expect(backup.data.issues.find((issue: { id: string }) => issue.id === deleted.id).deletedAt).not.toBeNull()
   expect(backup.data.issues.find((issue: { id: string }) => issue.id === parent.id).labels).toEqual(['仕事', '顧客,相談'])
   expect((await getSettings()).lastBackupAt).toBe(123)
