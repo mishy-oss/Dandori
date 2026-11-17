@@ -1,4 +1,9 @@
 interface Env {
+  GOOGLE_CLIENT_ID?: string
+  GOOGLE_CLIENT_SECRET?: string
+  GOOGLE_TOKEN_ENCRYPTION_KEY?: string
+  GOOGLE_ALLOWED_EMAILS?: string
+  APP_ORIGIN?: string
   VAPID_PUBLIC_KEY: string
   VAPID_PRIVATE_KEY: string
   VAPID_SUBJECT: string

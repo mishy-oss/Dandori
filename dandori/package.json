@@ -9,6 +9,7 @@
     "preview": "npm run build && wrangler dev",
     "lint": "eslint .",
     "test": "vitest run",
+    "test:google-worker": "node scripts/test-google-worker.mjs",
     "generate-icons": "pwa-assets-generator",
     "deploy": "npm run build && wrangler deploy"
   },

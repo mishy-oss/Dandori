@@ -5,6 +5,9 @@ import {
   type VapidKeys,
 } from '@block65/webcrypto-web-push'
 
+import { handleAccountRequest } from './accountRoutes'
+export { AccountData, AccountSession } from './accountObjects'
+
 const MAX_SCHEDULES = 500
 const MAX_SCHEDULE_AHEAD_MS = 366 * 24 * 60 * 60 * 1000
 const MAX_RETRIES = 5
@@ -302,6 +305,8 @@ async function sendToDevice(request: Request, env: Env, path: string): Promise<R
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url)
+    const accountResponse = await handleAccountRequest(request, env)
+    if (accountResponse) return accountResponse
     if (!url.pathname.startsWith('/api/push/')) return new Response(null, { status: 404 })
 
     if (request.method === 'GET' && url.pathname === '/api/push/config') {

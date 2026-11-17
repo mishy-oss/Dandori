@@ -18,12 +18,12 @@ export function groupBoardIssues(issues: Issue[], doneIds: Set<string>): BoardIs
   const groups = new Map<string, BoardIssueGroup>()
   for (const issue of issues) {
     if (issue.deletedAt !== null) continue
-    const key = JSON.stringify(issue.recurrenceId
-      ? ['recurrence', issue.projectId, issue.planningMonth ?? issue.sprintId, issue.recurrenceId]
+    const key = JSON.stringify(issue.recurrenceId || issue.calendarSeriesId
+      ? [issue.recurrenceId ? 'recurrence' : 'google-recurrence', issue.projectId, issue.planningMonth ?? issue.sprintId, issue.recurrenceId ?? issue.calendarSeriesId]
       : ['issue', issue.id])
     const group = groups.get(key)
     if (group) group.occurrences.push(issue)
-    else groups.set(key, { key, issue, occurrences: [issue], recurring: issue.recurrenceId !== null })
+    else groups.set(key, { key, issue, occurrences: [issue], recurring: issue.recurrenceId !== null || !!issue.calendarSeriesId })
   }
   for (const group of groups.values()) {
     group.occurrences.sort(compareOccurrences)
