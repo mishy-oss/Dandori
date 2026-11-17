@@ -1,0 +1,120 @@
+# Googleログイン・端末間同期・Googleカレンダー
+
+Googleで本人を確認し、タスクは既存のCloudflare WorkerのDurable Objectsへ保存します。Google DriveやGoogle Tasksへの保存ではありません。Googleカレンダーは別途許可した場合に、選択した1つのカレンダーと連携します。追加のライブラリや外部データベース契約は不要です。
+
+## 1. Google Cloudで準備する
+
+1. [Google Cloud Console](https://console.cloud.google.com/)で、このアプリ用のプロジェクトを作成するか選択します。
+2. 「APIとサービス → ライブラリ」で **Google Calendar API** を有効にします。
+3. 「Google Auth Platform」でアプリ名・連絡先・対象ユーザーを設定します。個人のGmailで試す場合はExternalを選び、Testingのテストユーザーに自分のGoogleアカウントを追加します。
+4. Data Accessに以下のスコープを登録します。ログイン時は上の3つ、カレンダー連携時に下の2つを追加で求めます。
+
+   ```text
+   openid
+   email
+   profile
+   https://www.googleapis.com/auth/calendar.events.owned
+   https://www.googleapis.com/auth/calendar.calendarlist.readonly
+   ```
+
+5. ClientsからOAuthクライアントを作成し、種類を **ウェブアプリケーション** にします。
+6. 「承認済みのリダイレクトURI」に次のURLを登録します。末尾まで完全一致が必要です。本番URLは自分のアプリのURLに置き換えます。
+
+   ```text
+   http://localhost:5173/api/auth/google/callback
+   https://自分の本番ホスト名/api/auth/google/callback
+   ```
+
+7. クライアントIDとクライアントシークレットを控えます。シークレットはチャットやソースコードに貼らず、次の設定先に入力します。
+
+Google側がTestingの間は、カレンダー権限を含むリフレッシュトークンが通常7日で期限切れになります。再認証が必要になるのはこの制限による場合があります。公開範囲を広げる場合はGoogleの公開・審査条件も確認してください。[トークン有効期限の公式説明](https://developers.google.com/identity/protocols/oauth2#expiration)、[同意画面の設定](https://developers.google.com/workspace/guides/configure-oauth-consent)
+
+## 2. 暗号化キーを用意する
+
+手元のターミナルで次を実行します。出力はGoogleのトークンをサーバーで暗号化するためのキーです。VAPIDキーとは別物です。
+
+```bash
+node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"
+```
+
+本番とプレビューには別のキーを使います。運用中に変更すると、保存済みのGoogleトークンを復号できなくなるため、カレンダーの再認証が必要です。
+
+## 3. ローカルの設定
+
+既存の `dandori/.dev.vars` のVAPID設定を残して、以下を追加します。ひな形は `dandori/.dev.vars.example` です。
+
+```dotenv
+GOOGLE_CLIENT_ID=Googleで発行されたクライアントID
+GOOGLE_CLIENT_SECRET=Googleで発行されたクライアントシークレット
+GOOGLE_TOKEN_ENCRYPTION_KEY=手順2で作った32バイトのBase64キー
+GOOGLE_ALLOWED_EMAILS=自分のGoogleアカウントのメールアドレス
+APP_ORIGIN=http://localhost:5173
+```
+
+`APP_ORIGIN` は末尾に `/` を付けず、実際にブラウザーで開くURLに一致させます。`localhost` と `127.0.0.1` は別の接続先です。ポートを変えたらGoogle側のリダイレクトURIも変更します。
+
+`GOOGLE_ALLOWED_EMAILS` に登録したメールアドレスだけがログインできます。自分の複数アカウントを許可する場合はカンマで区切ります。各Googleアカウントのタスクは独立しており、自動では混ざりません。
+
+```bash
+cd dandori
+npm run dev -- --host localhost --port 5173
+```
+
+設定が揃っていなければ、Google連携を無効と表示して端末のみの利用を継続します。既存の `.dev.vars` をひな形で上書きしないでください。
+
+## 4. Cloudflareの設定と反映
+
+Cloudflareの対象Workerの「設定 → 変数とシークレット」に、上の5項目を登録します。クライアントシークレットと暗号化キーは必ずSecretにします。`APP_ORIGIN` は本番の `https://...` に変更します。ビルド時の `VITE_...` 変数には入れません。
+
+この変更を通常の手順で反映し、ビルド・デプロイします。`ACCOUNT_DATA` と `ACCOUNT_SESSIONS` は `wrangler.jsonc` の宣言済みexportsで作成されます。既存の `PUSH_DEVICES` は残しています。`exports` と従来の `migrations` は併用しません。
+
+プレビューの保存領域は本番と分離しています。Google連携を試すプレビューには、プレビュー専用のOAuthクライアント・許可メール・暗号化キー・そのプレビューURLの `APP_ORIGIN` を設定し、Google側にそのURLのコールバックを登録します。設定なしのプレビューでも端末のみの機能は動作します。
+
+APIへの画面遷移をSPAのHTMLが横取りしないよう、`assets.run_worker_first` に `/api/*` を指定しています。[Cloudflareのルーティング説明](https://developers.cloudflare.com/workers/static-assets/routing/worker-script/#selective-worker-first-routing)
+
+## 5. 最初の利用
+
+1. 念のため、設定のバックアップからJSONを保存します。
+2. 「設定 → Googleアカウントと同期 → Googleでログイン」を押します。
+3. 初回はアカウント専用のタスク一覧が開きます。以前のタスクを移すには「未ログイン時のタスクを取り込む」を押します。元の端末データは残り、繰り返し・親子関係・ラベルを引き継ぎます。旧スプリントと、同じ日付の履歴がまだない月次実績も取り込みます。
+4. 別の端末で同じGoogleアカウントにログインすると、同じタスクが読み込まれます。その端末の未ログイン時のタスクも、必要な場合だけ取り込めます。
+5. 「Googleカレンダーを連携・再認証」で追加権限を許可します。
+6. 「カレンダー一覧を取得」から自分が所有するカレンダーを選び、「このカレンダーと双方向同期を開始」を押します。最初はDandori用のカレンダーをGoogle側で別途作成して試すと対象を確認しやすくなります。
+
+iPhoneのPWAでGoogle認証がSafariへ移った場合は、認証後に元のPWAをもう一度開いてください。一度限り・10分有効の引き継ぎ情報でPWAにもログインします。Googleのトークンをコピーする操作は不要です。別のブラウザーや端末に引き継ぎ情報を渡す必要もありません。
+
+## 同期する内容と動作
+
+- **端末間のタスク**：タスク・削除済み記録・親子・ラベル・繰り返しルール・月次履歴・旧スプリント・表示時間帯などの設定を同期します。テーマとPush通知の端末登録は端末ごとに保持します。
+- **タイミング**：起動・接続復帰・保存後と約30秒ごとにタスクを同期します。カレンダーは選択後・起動後と約3分ごと、またはボタンで同期します。アプリを閉じている間の即時同期は行わず、次回起動時に反映します。
+- **オフライン**：アカウント別のIndexedDBを使い続け、再接続後に変更を統合します。ログアウトすると未ログイン時の一覧へ戻ります。アカウントの端末キャッシュは消しません。
+- **競合**：別々のタスクの変更は統合します。同じタスクなどを両端末で変更した場合は同期を止め、バックアップ後に端末／クラウドのどちらを優先するか選べます。通信中に追加・編集した内容も保持します。
+- **Googleへの反映**：選択したカレンダーへ、配置済みタスクのタイトル・説明・日付・開始時刻・所要時間を反映します。終日予定も対応します。ステータスや優先度はGoogleへ書きません。
+- **Googleからの取り込み**：過去366日から先366日までの予定をRecurringのタスクとして取り込みます。Google由来の繰り返しはボード・タスク一覧でまとめます。ルールの編集はGoogle側で行い、アプリでは各回を編集します。終日予定は予定画面上部に表示します。
+- **削除**：アプリでタスクを削除するか未配置に戻すと、対応するGoogleの予定を削除します。Googleで削除すると対応タスクを削除済みにします。未配置に戻しただけのタスク自体は残します。
+- **Googleとの同時編集**：タイトル・説明・日時を両方で変えた場合は停止します。両方の画面の対象予定を確認し、同じ内容に揃えてから再同期してください。同期直前の変更もETagで検出します。
+- **対象外**：複数日にまたがる予定、5分未満・端数分の予定、誕生日などの特殊な予定は取り込みません。招待者のいる予定や他人が主催する予定は取り込みのみで、アプリからGoogleへの変更・招待メール送信はしません。カレンダーごとの色・Meet・添付ファイルなどは同期しません。
+- **件数・容量**：1アカウントの同期データは約1MB、1回のGoogleへの変更は100件までです。残りがある場合は次の同期で継続します。大量の繰り返しを含むカレンダーは専用カレンダーに分けてください。
+- **解除**：「カレンダー連携を解除」はGoogleのトークンを失効させ、同期設定を解除します。既存タスクとGoogleの予定は残します。再連携時の重複を防ぐため、予定IDの対応は保持します。カレンダーを切り替えた場合、連携済みの予定を別のカレンダーへ自動複製しません。
+
+## 認証情報の扱い
+
+認証コードはWorkerで交換し、PKCEとブラウザーに紐づく一度限りのstateで確認します。Googleのuserinfoで本人確認し、許可メールも確認します。Googleカレンダーのアクセストークン・リフレッシュトークンはAES-GCMで暗号化してサーバーだけに保存します。端末にはHttpOnly・SameSite=LaxのセッションCookieを設定し、本番HTTPSではSecureも付けます。
+
+iPhoneへの引き継ぎ情報は元の端末のsessionStorageに一時保存し、Googleの認証完了後に一度だけ交換します。Googleのトークンではありません。アカウント識別情報以外の認証情報をlocalStorageやJSONバックアップへ入れません。
+
+更新APIはOriginとログイン中のアカウントを確認します。別タブでGoogleアカウントが切り替わった場合も、古いタブのデータを別アカウントへ送らないよう拒否します。認証URLのクエリをログ・トレースから除外しています。
+
+## 開発時の検証
+
+```bash
+cd dandori
+npm test
+npm run test:google-worker
+npm run lint
+npm run build
+```
+
+`test:google-worker` は既存のWranglerに含まれるMiniflare/workerdで実際のSQLite・RPCを動かし、アカウント分離、更新競合、暗号化、セッション・引き継ぎの一度限りの交換など8項目を確認します。テスト用の認証情報と保存領域だけを使い、Googleや本番Cloudflareには送信しません。
+
+実際のGoogle同意画面・iPhone実機・本番の2端末間同期は、上記のOAuth設定を入れた後に確認してください。

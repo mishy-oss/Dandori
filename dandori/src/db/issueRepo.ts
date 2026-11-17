@@ -32,6 +32,7 @@ export interface CreateIssueInput {
   date?: string | null
   startMin?: number | null
   durationMin?: number
+  calendarAllDay?: boolean
   reminderOffsetMin?: number | null
   recurrence?: RecurrenceInput
 }
@@ -149,6 +150,8 @@ export async function listRecurrenceRules(projectId: string): Promise<Recurrence
 
 export async function createIssue(input: CreateIssueInput): Promise<Issue> {
   const title = input.title.trim()
+  if (input.calendarAllDay && (!input.date || input.startMin != null)) throw new Error('終日予定には日付を指定し、開始時刻は空にしてください')
+  const durationMin = input.calendarAllDay ? 1440 : input.durationMin ?? DEFAULT_DURATION_MIN
   if (!title) throw new Error('タイトルを入力してください')
   if (input.planningMonth !== undefined && !isValidMonth(input.planningMonth)) throw new Error('対象月を正しく指定してください')
 
@@ -183,7 +186,7 @@ export async function createIssue(input: CreateIssueInput): Promise<Issue> {
       ? normalizeRecurrence(input.recurrence, recurrenceStartDate)
       : null
 
-    validateSchedule(input.date ?? null, input.startMin ?? null, input.durationMin ?? DEFAULT_DURATION_MIN)
+    validateSchedule(input.date ?? null, input.startMin ?? null, durationMin)
 
     const t = now()
     const recurrenceRule: RecurrenceRule | null = recurrenceValues
@@ -214,7 +217,8 @@ export async function createIssue(input: CreateIssueInput): Promise<Issue> {
       rank: await nextRankInStatus(project.id, statusId),
       date: input.date ?? (recurrenceRule ? recurrenceStartDate : null),
       startMin: input.startMin ?? null,
-      durationMin: input.durationMin ?? DEFAULT_DURATION_MIN,
+      durationMin,
+      calendarAllDay: input.calendarAllDay ?? false,
       icon: '',
       color: project.color,
       reminderOffsetMin: input.reminderOffsetMin ?? null,
@@ -266,6 +270,11 @@ export async function updateIssue(
       updatedAt: t,
     }
     if (issuePatch.date && issuePatch.planningMonth === undefined && current.planningMonth) next.planningMonth = issuePatch.date.slice(0, 7)
+    if (next.startMin !== null || next.date === null) {
+      next.calendarAllDay = false
+      if (current.calendarAllDay && issuePatch.durationMin === undefined && next.durationMin === 1440) next.durationMin = DEFAULT_DURATION_MIN
+    }
+    if (next.calendarAllDay) next.durationMin = 1440
     validateSchedule(next.date, next.startMin, next.durationMin)
 
     if (recurrencePatch !== undefined) {

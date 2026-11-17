@@ -49,7 +49,7 @@ export function TimelineScreen() {
     [issues, selected],
   )
   const unplaced = useMemo(
-    () => issues.filter((issue) => issueMonth(issue) === selected.slice(0, 7) && issue.startMin === null && issue.type !== 'epic' && !doneIds.has(issue.statusId)),
+    () => issues.filter((issue) => issueMonth(issue) === selected.slice(0, 7) && issue.startMin === null && !issue.calendarAllDay && issue.type !== 'epic' && !doneIds.has(issue.statusId)),
     [issues, selected, doneIds],
   )
   const range = useMemo(
@@ -149,6 +149,10 @@ export function TimelineScreen() {
 
 
       <div className="timeline-sheet flex min-h-0 flex-1 flex-col">
+      {issues.some(issue => issue.date === selected && issue.calendarAllDay) && <section aria-label="終日予定" className="flex shrink-0 flex-wrap gap-2 px-4 py-2">
+        <span className="self-center text-xs text-muted">終日</span>
+        {issues.filter(issue => issue.date === selected && issue.calendarAllDay).map(issue => <button key={issue.id} data-no-drag onClick={() => setEditor({ issue })} className="min-h-11 rounded-lg border border-border px-3 text-sm">{issue.title}</button>)}
+      </section>}
       <UnplacedTray
         issues={unplaced}
         drag={drag}

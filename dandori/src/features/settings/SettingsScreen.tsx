@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { Icon } from '../../app/Icon'
 import { ReleaseNotesDialog } from './ReleaseNotesDialog'
 import { BackupSettingsSection } from './BackupSettingsSection'
+import { GoogleAccountSection } from '../account/GoogleAccountSection'
 import { useThemeStore, type ThemeSetting } from '../../store/theme'
 import { TimelineSettingsSection } from './TimelineSettingsSection'
 import { PushNotificationsSettings } from '../notifications/PushNotificationsSettings'
@@ -26,6 +27,7 @@ export function SettingsScreen() {
         <Icon name="info" className="size-6" />
       </button>
     }>
+      <GoogleAccountSection />
       <TimelineSettingsSection />
       <PushNotificationsSettings />
       <BackupSettingsSection />

@@ -63,6 +63,10 @@ export interface Issue {
   reminderOffsetMin: number | null
   recurrenceId: ID | null
   assigneeId: ID | null
+  calendarAllDay?: boolean
+  calendarSource?: string
+  calendarReadOnly?: boolean
+  calendarSeriesId?: string
   completedAt: number | null
   createdAt: number
   updatedAt: number

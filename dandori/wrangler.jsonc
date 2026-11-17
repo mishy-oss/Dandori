@@ -4,17 +4,24 @@
   "compatibility_date": "2026-10-06",
   "main": "./worker/index.ts",
   "observability": {
-    "enabled": true
+    "enabled": true,
+    "redact_query_string": true,
+    "traces": { "enabled": true }
   },
   "durable_objects": {
     "bindings": [
-      { "name": "PUSH_DEVICES", "class_name": "PushDevice" }
+      { "name": "PUSH_DEVICES", "class_name": "PushDevice" },
+      { "name": "ACCOUNT_DATA", "class_name": "AccountData" },
+      { "name": "ACCOUNT_SESSIONS", "class_name": "AccountSession" }
     ]
   },
   "exports": {
-    "PushDevice": { "type": "durable-object", "storage": "sqlite" }
+    "PushDevice": { "type": "durable-object", "storage": "sqlite" },
+    "AccountData": { "type": "durable-object", "storage": "sqlite" },
+    "AccountSession": { "type": "durable-object", "storage": "sqlite" }
   },
   "assets": {
+    "run_worker_first": ["/api/*"],
     "not_found_handling": "single-page-application"
   },
   // 作業ブランチのプレビューでも通知予定の保存先を利用する。
@@ -22,7 +29,9 @@
   "previews": {
     "durable_objects": {
       "bindings": [
-        { "name": "PUSH_DEVICES", "class_name": "PushDevice" }
+        { "name": "PUSH_DEVICES", "class_name": "PushDevice" },
+        { "name": "ACCOUNT_DATA", "class_name": "AccountData" },
+        { "name": "ACCOUNT_SESSIONS", "class_name": "AccountSession" }
       ]
     }
   }
