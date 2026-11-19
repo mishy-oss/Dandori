@@ -59,7 +59,7 @@ export async function carryoverIssue(id: string, input: CarryoverInput): Promise
         parentId: original.parentId ? targetIds.get(original.parentId) ?? original.parentId : null,
         date, startMin, durationMin: allDay ? 1440 : isRoot ? input.durationMin : original.durationMin,
         calendarAllDay: allDay, planningMonth: date.slice(0, 7), sprintId: null,
-        statusId: status.id, recurrenceId: null,
+        statusId: status.id, recurrenceId: null, recurrenceDate: undefined, recurrenceSeriesId: undefined,
         calendarSource: undefined, calendarReadOnly: undefined, calendarSeriesId: undefined,
         completedAt: null, createdAt: timestamp, updatedAt: timestamp, deletedAt: null,
       }

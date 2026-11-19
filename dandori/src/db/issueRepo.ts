@@ -2,7 +2,8 @@ import { db } from './db'
 import { newId, now } from '../lib/id'
 import { compareRank, rankAfter, rankBetween, ranksForCount } from '../lib/rank'
 import { validateSchedule } from '../lib/schedule'
-import { isValidDateStr, nextRecurrenceDate, nextWeeklyRecurrenceDate, todayStr } from '../lib/date'
+import { isValidDateStr, todayStr } from '../lib/date'
+import { nextRuleDate, recurrenceSource, recurrenceTemplate } from '../lib/recurrence'
 import { getProject, getWorkflow } from './projectRepo'
 import { getSprint } from './sprintRepo'
 import { expandRecurrenceInSprint, expandRecurrenceInMonth } from './recurrenceRepo'
@@ -81,7 +82,7 @@ function activeInStatus(issues: Issue[], statusId: string): Issue[] {
   return issues.filter((i) => i.deletedAt === null && !i.carryoverToId && i.statusId === statusId)
 }
 
-function normalizeRecurrence(input: RecurrenceInput, startDate: string): Omit<RecurrenceRule, 'id' | 'projectId' | 'createdAt' | 'updatedAt'> {
+export function normalizeRecurrence(input: RecurrenceInput, startDate: string): Omit<RecurrenceRule, 'id' | 'projectId' | 'createdAt' | 'updatedAt'> {
   if (!['daily', 'weekly', 'monthly'].includes(input.frequency)) {
     throw new Error('繰り返し頻度を正しく選択してください')
   }
@@ -224,13 +225,15 @@ export async function createIssue(input: CreateIssueInput): Promise<Issue> {
       color: project.color,
       reminderOffsetMin: input.reminderOffsetMin ?? null,
       recurrenceId: recurrenceRule?.id ?? null,
+      recurrenceDate: recurrenceRule ? recurrenceStartDate : undefined,
+      recurrenceSeriesId: recurrenceRule?.id,
       assigneeId: null,
       completedAt: status.category === 'done' ? t : null,
       createdAt: t,
       updatedAt: t,
       deletedAt: null,
     }
-    if (recurrenceRule) await db.recurrenceRules.add(recurrenceRule)
+    if (recurrenceRule) await db.recurrenceRules.add({ ...recurrenceRule, template: recurrenceTemplate(issue) })
     await db.issues.add(issue)
     await db.projects.update(project.id, {
       nextNumber: project.nextNumber + 1,
@@ -305,6 +308,8 @@ export async function updateIssue(
           }
           await db.recurrenceRules.add(newRule)
           next.recurrenceId = newRule.id
+          next.recurrenceSeriesId = newRule.id
+          next.recurrenceDate = next.date ?? recurrenceStartDate
         }
       }
     }
@@ -372,36 +377,36 @@ async function createNextOccurrence(completed: Issue, timestamp: number): Promis
     if (sprint) await expandRecurrenceInSprint(completed, sprint, timestamp)
   }
   const refreshed = completed.sprintId ? await db.issues.get(completed.id) : undefined
-  const currentDate = refreshed?.date ?? completed.date ?? rule.startDate
-  const nextDate =
-    rule.frequency === 'weekly' && rule.weekdays?.length
-      ? nextWeeklyRecurrenceDate(currentDate, rule.weekdays, rule.interval, rule.startDate)
-      : nextRecurrenceDate(currentDate, rule.frequency, rule.interval, rule.startDate)
+  const currentDate = refreshed?.recurrenceDate ?? completed.recurrenceDate ?? refreshed?.date ?? completed.date ?? rule.startDate
+  let nextDate = nextRuleDate(rule, currentDate)
+  while (rule.excludedDates?.includes(nextDate) || (rule.effectiveFrom && nextDate < rule.effectiveFrom)) nextDate = nextRuleDate(rule, nextDate)
   if (rule.endDate && nextDate > rule.endDate) return
 
   const alreadyExists = await db.issues
     .where('recurrenceId')
     .equals(rule.id)
-    .filter((issue) => (completed.planningMonth !== undefined || issue.deletedAt === null) && issue.date === nextDate)
+    .filter((issue) => (rule.seriesId !== undefined || completed.planningMonth !== undefined || issue.deletedAt === null) && (issue.recurrenceDate ?? issue.date) === nextDate)
     .first()
   if (alreadyExists) return
 
   const project = await getProject(completed.projectId)
   const workflow = project && await getWorkflow(project.workflowId)
-  const todoStatus = workflow?.statuses.find((status) => status.category === (completed.isRoutine ? 'routine' : 'todo'))
+  const source = recurrenceSource(completed, rule)
+  const todoStatus = workflow?.statuses.find((status) => status.category === (source.isRoutine ? 'routine' : 'todo'))
   if (!project || !todoStatus) return
 
   const nextIssue: Issue = {
-    ...completed,
+    ...source,
     carryoverFromId: undefined, carryoverToId: undefined, carryoverRootId: undefined, carryoverSequence: undefined,
-    id: newId(),
+    id: rule.seriesId ? `r-${rule.id}-${nextDate}` : newId(),
     number: project.nextNumber,
     statusId: todoStatus.id,
     sprintId: null,
     planningMonth: completed.planningMonth ? nextDate.slice(0, 7) : undefined,
     rank: await nextRankInStatus(project.id, todoStatus.id),
     date: nextDate,
-    dueDate: completed.dueDate === currentDate ? nextDate : completed.dueDate,
+    recurrenceDate: nextDate,
+    dueDate: source.dueDate === source.date ? nextDate : source.dueDate,
     completedAt: null,
     createdAt: timestamp,
     updatedAt: timestamp,

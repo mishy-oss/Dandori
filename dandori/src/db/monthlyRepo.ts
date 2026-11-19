@@ -6,6 +6,7 @@ import { todayStr } from '../lib/date'
 import { syncParentStatuses } from './issueRepo'
 import type { Issue, MonthlySnapshot } from './types'
 import { currentWork } from '../lib/carryover'
+import { ruleDates } from '../lib/recurrence'
 
 /* 親と子の作業を二重に数えないよう、集計は末端のタスクだけを対象にする。 */
 export function monthlyWork(issues: Issue[], month: string, doneIds: Set<string>) {
@@ -24,8 +25,17 @@ export async function prepareMonthlyProject(projectId: string, selectedMonth: st
     const doneIds = new Set(workflow.statuses.filter((status) => status.category === 'done').map((status) => status.id))
     const month = today.slice(0, 7)
     const all = await db.issues.where('projectId').equals(projectId).toArray()
+    const rules = new Map((await db.recurrenceRules.where('projectId').equals(projectId).toArray()).map(rule => [rule.id, rule]))
     for (const issue of all) {
       if (issue.carryoverToId) continue
+      const rule = issue.recurrenceId ? rules.get(issue.recurrenceId) : undefined
+      const date = issue.recurrenceDate
+      // オフラインで別々の曜日へ変更した端末を統合した場合も、採用したルールの生成分だけを残す。
+      if (issue.deletedAt === null && !doneIds.has(issue.statusId) && rule?.seriesId && date && issue.id === `r-${rule.id}-${date}` && !ruleDates(rule, date, date).length) {
+        const linked = !!issue.carryoverFromId || all.some(child => child.parentId === issue.id && child.deletedAt === null)
+        await db.issues.update(issue.id, linked ? { recurrenceId: null, recurrenceDate: undefined, recurrenceSeriesId: undefined, updatedAt: Date.now() } : { deletedAt: Date.now(), updatedAt: Date.now() })
+        continue
+      }
       const originalMonth = issueMonth(issue)
       const targetMonth = issue.deletedAt === null && !doneIds.has(issue.statusId) && originalMonth < month ? month : originalMonth
       if (!issue.planningMonth || issue.planningMonth !== targetMonth || issue.sprintId !== null) {

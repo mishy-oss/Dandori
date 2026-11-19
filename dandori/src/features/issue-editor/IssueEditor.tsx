@@ -10,6 +10,7 @@ import { DeleteIssueDialog } from './DeleteIssueDialog'
 import { CarryoverDialog } from './CarryoverDialog'
 import { currentWork } from '../../lib/carryover'
 import { createScheduleInput, scheduleInputError, updateScheduleInput } from './scheduleInput'
+import type { RecurringEditScope } from '../../db/recurringEditRepo'
 
 const FIELD =
   'min-h-11 w-full rounded-lg border border-border bg-surface-2 px-3 text-base'
@@ -37,7 +38,6 @@ export function IssueEditor({
   const updateIssue = useDataStore((s) => s.updateIssue)
   const deleteIssue = useDataStore((s) => s.deleteIssue)
   const moveIssue = useDataStore((s) => s.moveIssue)
-  const stopRecurrence = useDataStore((s) => s.stopRecurrence)
   const recurrenceRule = useDataStore((s) => s.recurrenceRules.find((rule) => rule.id === issue?.recurrenceId))
   const issues = useDataStore((s) => s.issues)
   // 並び順は同じステータス・同じ対象月の中で扱う。
@@ -62,7 +62,11 @@ export function IssueEditor({
     issue?.statusId ?? defaultStatusId ?? workflow?.statuses[0]?.id ?? '',
   )
   const [planningMonth, setPlanningMonth] = useState(issue ? issueMonth(issue) : initialSchedule?.date?.slice(0, 7) ?? defaultPlanningMonth)
-  const [parentId, setParentId] = useState<string | null>(issue?.parentId ?? null)
+  const savedParentId = issue?.parentId ?? null
+  const [parentDraft, setParentDraft] = useState({ saved: savedParentId, value: savedParentId })
+  // 関連画面から親子関係を外した後、古いフォームの保存で再接続しない。
+  const parentId = parentDraft.saved === savedParentId ? parentDraft.value : savedParentId
+  const setParentId = (value: string | null) => setParentDraft({ saved: savedParentId, value })
   const [dueDate, setDueDate] = useState(issue?.dueDate ?? '')
   const [date, setDate] = useState(issue?.date ?? initialSchedule?.date ?? '')
   const startInit = issue ? issue.startMin : (initialSchedule?.startMin ?? null)
@@ -80,9 +84,11 @@ export function IssueEditor({
     recurrenceRule?.weekdays ?? [new Date(`${date || todayStr()}T00:00:00`).getDay()],
   )
   const [recurrenceEndDate, setRecurrenceEndDate] = useState(recurrenceRule?.endDate ?? '')
+  const [editScope, setEditScope] = useState<RecurringEditScope>('single')
   const [error, setError] = useState<string | null>(null)
   const [childTitle, setChildTitle] = useState('')
   const [addingChild, setAddingChild] = useState(false)
+  const [detachingId, setDetachingId] = useState<string | null>(null)
   // 元の入力内容を失わないよう、関連タスクは別の編集画面で開く。
   const [relatedIssueId, setRelatedIssueId] = useState<string | null>(null)
   const relatedIssue = issues.find((item) => item.id === relatedIssueId)
@@ -139,8 +145,23 @@ export function IssueEditor({
     }
   }
 
+  async function detachParent(child: Issue) {
+    if (detachingId) return
+    setDetachingId(child.id)
+    setError(null)
+    try {
+      await updateIssue(child.id, { parentId: null })
+      if (child.id === issueId) setParentDraft({ saved: null, value: null })
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      setDetachingId(null)
+    }
+  }
+
   function onSubmit(e: FormEvent) {
     e.preventDefault()
+    if (detachingId) return
     if (!isValidMonth(planningMonth)) { setError('対象月を選択してください'); return }
     if (calendarAllDay && !date) { setError('終日予定の日付を指定してください'); return }
     const timeError = calendarAllDay ? null : scheduleInputError(schedule)
@@ -197,7 +218,7 @@ export function IssueEditor({
               endDate: recurrenceEndDate || null,
             }
           : null,
-      })
+      }, issue.recurrenceId ? editScope : undefined)
     })
   }
 
@@ -278,7 +299,14 @@ export function IssueEditor({
           </ul>}
         </fieldset>
 
-        <fieldset disabled={!!issue?.calendarSeriesId} className="flex flex-col gap-2 rounded-lg border border-border p-3">
+        {issue?.recurrenceId && <fieldset className="flex flex-col gap-2 rounded-lg border border-accent/30 p-3">
+          <legend className="px-1 text-sm font-semibold">変更する範囲</legend>
+          <label className="flex min-h-11 items-center gap-2 text-sm"><input type="radio" name={`edit-scope-${scheduleHelpId}`} checked={editScope === 'single'} onChange={() => setEditScope('single')} />この回のみ</label>
+          <label className="flex min-h-11 items-center gap-2 text-sm"><input type="radio" name={`edit-scope-${scheduleHelpId}`} checked={editScope === 'future'} disabled={workflow?.statuses.some(status => status.id === issue.statusId && status.category === 'done')}
+            onChange={() => setEditScope('future')} />この回以降</label>
+          <p className="text-xs text-muted">「この回以降」は変更した内容を後の未完了分と今後の生成に反映します。ステータス・親子関係・対象月はこの回だけに反映します。完了済みの回と持ち越し履歴は変更しません。</p>
+        </fieldset>}
+        <fieldset disabled={!!issue?.calendarSeriesId || (!!issue?.recurrenceId && editScope === 'single')} className="flex flex-col gap-2 rounded-lg border border-border p-3">
             <legend className="px-1 text-sm font-semibold text-muted">繰り返し</legend>
             {issue?.calendarSeriesId && <p className="text-xs text-muted">Googleカレンダーの繰り返し予定です。曜日などのルールはGoogle側で変更してください。ここでは1回分を編集します。</p>}
             <div className="grid grid-cols-2 gap-2">
@@ -358,16 +386,9 @@ export function IssueEditor({
             {recurrence === 'monthly' && (
               <p className="text-xs text-muted">開始日と同じ日にちで繰り返します。その日がない月は月末になります。</p>
             )}
-            {issue && recurrenceRule?.active && (
-              <button
-                type="button"
-                className="min-h-11 rounded-lg border border-border px-3 text-sm"
-                onClick={() => void run(() => stopRecurrence(recurrenceRule.id))}
-              >
-                この繰り返しを停止
-              </button>
-            )}
           </fieldset>
+        {issue?.recurrenceId && <p className="text-xs text-muted">頻度・曜日・終了日を変える場合は「この回以降」を選択してください。「繰り返さない」でこの回を単発にし、後の未完了分を取り消せます。曜日変更時はこの回も指定日以降の最初の該当日に配置します。</p>}
+        {recurrenceRule && !recurrenceRule.active && <p className="text-xs text-muted">この繰り返しは停止中です。保存しても再開しません。</p>}
 
         <label className="flex flex-col gap-1 text-sm text-muted">
           説明
@@ -420,7 +441,7 @@ export function IssueEditor({
           </label>
           <label className="flex flex-col gap-1 text-sm text-muted">
             親Issue / Epic
-            <select className={FIELD} value={parentId ?? ''} onChange={(e) => setParentId(e.target.value || null)}>
+            <select className={FIELD} disabled={detachingId !== null} value={parentId ?? ''} onChange={(e) => setParentId(e.target.value || null)}>
               <option value="">なし</option>
               {parentOptions.map((parent) => (
                 <option key={parent.id} value={parent.id}>
@@ -428,8 +449,15 @@ export function IssueEditor({
                 </option>
               ))}
             </select>
-            {parentId && <button type="button" className="min-h-11 text-left text-xs text-accent"
-              onClick={() => setRelatedIssueId(parentId)}>親タスクを編集</button>}
+            {parentId && <>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" disabled={detachingId !== null} className="min-h-11 text-left text-xs text-accent disabled:opacity-40"
+                  onClick={() => setRelatedIssueId(parentId)}>親タスクを編集</button>
+                <button type="button" disabled={detachingId !== null} className="min-h-11 rounded-lg border border-border px-3 text-xs disabled:opacity-40"
+                  onClick={() => { if (issue?.parentId) void detachParent(issue); else setParentId(null) }}>{detachingId === issueId ? '解除中…' : '親を外す'}</button>
+              </div>
+              <span className="text-xs">{issue?.parentId ? 'タスクは残し、親子関係だけを外します。解除はすぐに保存されます。' : '親の選択を解除します。'}</span>
+            </>}
           </label>
           <label className="col-span-2 flex flex-col gap-1 text-sm text-muted">
             通知
@@ -525,15 +553,18 @@ export function IssueEditor({
             <legend className="px-1 text-sm font-semibold text-muted">
               子タスク ({children.length})
             </legend>
-            {children.length > 0 && <p className="text-xs text-muted">親のステータスは子タスクの進捗に連動します。子タスクを押すと編集できます。</p>}
+            {children.length > 0 && <p className="text-xs text-muted">親のステータスは子タスクの進捗に連動します。子タスクを押すと編集できます。「外す」はタスクを残して親子関係だけを解除し、すぐに保存します。</p>}
             {children.length > 0 ? (
               <ul className="flex flex-col gap-1">
                 {children.map((child) => (
                   <li key={child.id} className="flex items-center gap-2 rounded-lg bg-surface-2 px-3 py-2 text-sm">
                     <span className="shrink-0 text-xs text-muted">{child.type === 'epic' ? 'Epic' : child.type} · {formatIssueNumber(child.number)}</span>
-                    <button type="button" aria-label={`${child.title}を編集`} className="min-h-11 min-w-0 flex-1 truncate text-left text-accent"
+                    <button type="button" aria-label={`${child.title}を編集`} disabled={detachingId !== null} className="min-h-11 min-w-0 flex-1 truncate text-left text-accent disabled:opacity-40"
                       onClick={() => setRelatedIssueId(child.id)}>{child.title}</button>
                     <span className="shrink-0 text-xs text-muted">{workflow?.statuses.find((s) => s.id === child.statusId)?.name}</span>
+                    <button type="button" aria-label={`${child.title}を親タスクから外す`} disabled={detachingId !== null}
+                      className="min-h-11 min-w-11 shrink-0 rounded-lg border border-border px-2 text-xs disabled:opacity-40"
+                      onClick={() => void detachParent(child)}>{detachingId === child.id ? '解除中…' : '外す'}</button>
                   </li>
                 ))}
               </ul>
@@ -617,7 +648,8 @@ export function IssueEditor({
           </button>
           <button
             type="submit"
-            className="min-h-11 flex-1 rounded-lg bg-accent px-4 text-sm font-semibold text-accent-text"
+            disabled={detachingId !== null}
+            className="min-h-11 flex-1 rounded-lg bg-accent px-4 text-sm font-semibold text-accent-text disabled:opacity-40"
           >
             保存
           </button>

@@ -19,7 +19,7 @@ export function groupBoardIssues(issues: Issue[], doneIds: Set<string>): BoardIs
   for (const issue of issues) {
     if (issue.deletedAt !== null || issue.carryoverToId) continue
     const key = JSON.stringify(issue.recurrenceId || issue.calendarSeriesId
-      ? [issue.recurrenceId ? 'recurrence' : 'google-recurrence', issue.projectId, issue.planningMonth ?? issue.sprintId, issue.recurrenceId ?? issue.calendarSeriesId]
+      ? [issue.recurrenceId ? 'recurrence' : 'google-recurrence', issue.projectId, issue.planningMonth ?? issue.sprintId, issue.recurrenceId ? issue.recurrenceSeriesId ?? issue.recurrenceId : issue.calendarSeriesId]
       : ['issue', issue.id])
     const group = groups.get(key)
     if (group) group.occurrences.push(issue)
