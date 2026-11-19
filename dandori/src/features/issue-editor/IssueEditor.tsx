@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useId, useMemo, useState, type FormEvent } from 'react'
 import { ISSUE_TYPES, PRIORITIES, PRIORITY_LABELS, type Issue, type IssueType, type Priority, type RecurrenceFrequency } from '../../db/types'
 import { formatIssueNumber } from '../../lib/issueNumber'
 import { todayStr } from '../../lib/date'
@@ -7,6 +7,7 @@ import { selectCurrentProject, useDataStore } from '../../store/data'
 import { formatMin, parseTime } from '../timeline/timelineLogic'
 import { appendIssueLabel, scheduledEditorStatusId } from './issueEditorLogic'
 import { DeleteIssueDialog } from './DeleteIssueDialog'
+import { createScheduleInput, scheduleInputError, updateScheduleInput } from './scheduleInput'
 
 const FIELD =
   'min-h-11 w-full rounded-lg border border-border bg-surface-2 px-3 text-base'
@@ -26,6 +27,7 @@ export function IssueEditor({
   onClose: () => void
 }) {
   const project = useDataStore(selectCurrentProject)
+  const scheduleHelpId = useId()
   const workflow = useDataStore((s) => (project ? s.workflows[project.workflowId] : undefined))
   const defaultDuration = useDataStore((s) => s.settings.defaultDuration)
   const createIssue = useDataStore((s) => s.createIssue)
@@ -60,8 +62,12 @@ export function IssueEditor({
   const [dueDate, setDueDate] = useState(issue?.dueDate ?? '')
   const [date, setDate] = useState(issue?.date ?? initialSchedule?.date ?? '')
   const startInit = issue ? issue.startMin : (initialSchedule?.startMin ?? null)
-  const [startTime, setStartTime] = useState(startInit === null ? '' : formatMin(startInit))
-  const [duration, setDuration] = useState(String(issue?.durationMin ?? defaultDuration))
+  const [schedule, setSchedule] = useState(() => createScheduleInput(
+    startInit === null ? '' : formatMin(startInit), String(issue?.durationMin ?? defaultDuration),
+  ))
+  const { startTime, endTime, duration } = schedule
+  const setStartTime = (value: string) => setSchedule(current => updateScheduleInput(current, 'startTime', value))
+  const setDuration = (value: string) => setSchedule(current => updateScheduleInput(current, 'duration', value))
   const [calendarAllDay, setCalendarAllDay] = useState(!!issue?.calendarAllDay)
   const [reminderOffsetMin, setReminderOffsetMin] = useState<number | null>(issue ? issue.reminderOffsetMin : 0)
   const [recurrence, setRecurrence] = useState<RecurrenceFrequency | ''>(recurrenceRule?.frequency ?? '')
@@ -133,6 +139,8 @@ export function IssueEditor({
     e.preventDefault()
     if (!isValidMonth(planningMonth)) { setError('対象月を選択してください'); return }
     if (calendarAllDay && !date) { setError('終日予定の日付を指定してください'); return }
+    const timeError = calendarAllDay ? null : scheduleInputError(schedule)
+    if (timeError) { setError(timeError); return }
     const startMin = calendarAllDay ? null : startTime ? parseTime(startTime) : null
     if (!calendarAllDay && startTime && startMin === null) {
       setError('開始時刻が正しくありません')
@@ -425,8 +433,8 @@ export function IssueEditor({
           <legend className="px-1 text-sm font-semibold text-muted">スケジュール（タイムライン）</legend>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={calendarAllDay} onChange={event => { setCalendarAllDay(event.target.checked); if (!event.target.checked && duration === '1440') setDuration('30') }} />終日予定</label>
           {issue?.calendarReadOnly && <p className="text-xs text-muted">招待者のいるGoogleの予定です。ここでの変更はアプリ内だけに保存されます。</p>}
-          <div className="grid grid-cols-3 gap-2">
-            <label className="col-span-3 flex flex-col gap-1 text-sm text-muted sm:col-span-1">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <label className="col-span-2 flex flex-col gap-1 text-sm text-muted sm:col-span-3">
               日付
               <input type="date" className={FIELD} value={date} onChange={(e) => { setDate(e.target.value); if (e.target.value) setPlanningMonth(e.target.value.slice(0, 7)) }} />
             </label>
@@ -435,10 +443,26 @@ export function IssueEditor({
               <input
                 type="time"
                 disabled={calendarAllDay}
-                step={issue?.calendarSource ? 60 : 300}
-                className={FIELD}
+                step={60}
+                className={`${FIELD} min-w-0`}
                 value={startTime}
                 onChange={(e) => setStartTime(e.target.value)}
+              />
+            </label>
+            <label className="flex min-w-0 flex-col gap-1 text-sm text-muted">
+              終了時刻
+              <input
+                type="time"
+                disabled={calendarAllDay}
+                step={60}
+                className={`${FIELD} min-w-0`}
+                aria-describedby={scheduleHelpId}
+                value={calendarAllDay ? '' : endTime === '24:00' ? '00:00' : endTime}
+                onChange={(event) => {
+                  // ネイティブの時刻入力では24:00を選べないため、終了の00:00を日の終わりとして扱う。
+                  const value = event.target.value === '00:00' ? '24:00' : event.target.value
+                  setSchedule(current => updateScheduleInput(current, 'endTime', value))
+                }}
               />
             </label>
             <label className="flex flex-col gap-1 text-sm text-muted">
@@ -448,13 +472,14 @@ export function IssueEditor({
                 disabled={calendarAllDay}
                 inputMode="numeric"
                 min={5}
-                step={issue?.calendarSource ? 1 : 5}
+                step={1}
                 className={FIELD}
                 value={calendarAllDay ? '1440' : duration}
                 onChange={(e) => setDuration(e.target.value)}
               />
             </label>
           </div>
+          <p id={scheduleHelpId} className="text-xs text-muted">終了時刻と所要時間は自動で連動します。終了の00:00は当日の24:00として扱います。</p>
           <button
             type="button"
             disabled={!startTime && !calendarAllDay}
