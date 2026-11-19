@@ -3,6 +3,7 @@ import * as issueRepo from '../db/issueRepo'
 import * as projectRepo from '../db/projectRepo'
 import * as settingsRepo from '../db/settingsRepo'
 import { carryoverIssue, type CarryoverInput } from '../db/carryoverRepo'
+import { editRecurringIssue, type RecurringEditScope } from '../db/recurringEditRepo'
 import { prepareMonthlyProject, listMonthlySnapshots } from '../db/monthlyRepo'
 import { currentMonth, isValidMonth } from '../lib/month'
 import type { MonthlySnapshot } from '../db/types'
@@ -33,7 +34,7 @@ interface DataState {
   scheduleIssue: (id: string, change: ScheduleChange) => Promise<void>
   toggleIssueDone: (id: string) => Promise<void>
   createIssue: (input: Omit<issueRepo.CreateIssueInput, 'projectId'>) => Promise<Issue>
-  updateIssue: (id: string, patch: issueRepo.IssuePatch) => Promise<void>
+  updateIssue: (id: string, patch: issueRepo.IssuePatch, scope?: RecurringEditScope) => Promise<void>
   moveIssue: (
     id: string,
     statusId: string,
@@ -153,8 +154,9 @@ export const useDataStore = create<DataState>((set, get) => {
       await reload()
       return issue
     },
-    updateIssue: async (id, patch) => {
-      await issueRepo.updateIssue(id, patch)
+    updateIssue: async (id, patch, scope) => {
+      if (scope) await editRecurringIssue(id, patch, scope)
+      else await issueRepo.updateIssue(id, patch)
       await reload()
     },
     moveIssue: async (id, statusId, index, scopeMonth) => {

@@ -62,6 +62,9 @@ export interface Issue {
   color: string
   reminderOffsetMin: number | null
   recurrenceId: ID | null
+  /** 個別に日付を変更しても、元の発生日を再生成しないための識別日。 */
+  recurrenceDate?: string
+  recurrenceSeriesId?: ID
   assigneeId: ID | null
   calendarAllDay?: boolean
   calendarSource?: string
@@ -79,6 +82,7 @@ export interface Issue {
 }
 
 export type RecurrenceFrequency = 'daily' | 'weekly' | 'monthly'
+export type RecurrenceTemplate = Pick<Issue, 'title' | 'description' | 'type' | 'priority' | 'labels' | 'parentId' | 'dueDate' | 'estimateMin' | 'date' | 'startMin' | 'durationMin' | 'calendarAllDay' | 'reminderOffsetMin' | 'icon' | 'color' | 'isRoutine'>
 
 export interface RecurrenceRule {
   id: ID
@@ -90,6 +94,11 @@ export interface RecurrenceRule {
   startDate: string
   endDate: string | null
   active: boolean
+  template?: RecurrenceTemplate
+  effectiveFrom?: string
+  excludedDates?: string[]
+  /** 分割前後のルールを同じカードにまとめるための系列ID。 */
+  seriesId?: ID
   createdAt: number
   updatedAt: number
 }
