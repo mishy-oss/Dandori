@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import * as issueRepo from '../db/issueRepo'
 import * as projectRepo from '../db/projectRepo'
 import * as settingsRepo from '../db/settingsRepo'
+import { carryoverIssue, type CarryoverInput } from '../db/carryoverRepo'
 import { prepareMonthlyProject, listMonthlySnapshots } from '../db/monthlyRepo'
 import { currentMonth, isValidMonth } from '../lib/month'
 import type { MonthlySnapshot } from '../db/types'
@@ -41,6 +42,7 @@ interface DataState {
   ) => Promise<void>
   deleteIssue: (id: string) => Promise<void>
   stopRecurrence: (id: string) => Promise<void>
+  carryoverIssue: (id: string, input: CarryoverInput) => Promise<Issue>
 
 }
 
@@ -169,6 +171,11 @@ export const useDataStore = create<DataState>((set, get) => {
     stopRecurrence: async (id) => {
       await issueRepo.stopRecurrence(id)
       await reload()
+    },
+    carryoverIssue: async (id, input) => {
+      const result = await carryoverIssue(id, input)
+      await reload()
+      return result
     },
 
   }

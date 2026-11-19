@@ -17,7 +17,7 @@ export function compareOccurrences(a: Issue, b: Issue): number {
 export function groupBoardIssues(issues: Issue[], doneIds: Set<string>): BoardIssueGroup[] {
   const groups = new Map<string, BoardIssueGroup>()
   for (const issue of issues) {
-    if (issue.deletedAt !== null) continue
+    if (issue.deletedAt !== null || issue.carryoverToId) continue
     const key = JSON.stringify(issue.recurrenceId || issue.calendarSeriesId
       ? [issue.recurrenceId ? 'recurrence' : 'google-recurrence', issue.projectId, issue.planningMonth ?? issue.sprintId, issue.recurrenceId ?? issue.calendarSeriesId]
       : ['issue', issue.id])
@@ -34,7 +34,7 @@ export function groupBoardIssues(issues: Issue[], doneIds: Set<string>): BoardIs
 
 /* 1枚のカードに複数回が隠れるため、表示上の挿入位置をそのまま保存には使えない。 */
 export function groupedDropIndex(issues: Issue[], doneIds: Set<string>, movingId: string, statusId: string, index: number): number {
-  const remaining = issues.filter((issue) => issue.id !== movingId && issue.deletedAt === null)
+  const remaining = issues.filter((issue) => issue.id !== movingId && issue.deletedAt === null && !issue.carryoverToId)
   const column = remaining.filter((issue) => issue.statusId === statusId).sort(compareRank)
   const visible = groupBoardIssues(remaining, doneIds).filter((group) => group.issue.statusId === statusId)
   const anchor = visible[Math.max(0, index)]

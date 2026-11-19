@@ -95,6 +95,23 @@ it('soft deletes a task when its Google event is cancelled', async () => {
   const result = await synchronizeCalendar(initial.data, initial.calendar, google([event({ status: 'cancelled' })]), now)
   expect(result.data.issues[0].deletedAt).toBe(now)
 })
+
+it('freezes the old placement across Google edits and cancellations and exports only a separate new event', async () => {
+  const first = await synchronizeCalendar(initialSyncData(1), calendar(), google([event()]), now)
+  const previous = first.data.issues[0]
+  const next = fixtureIssue({ id: 'carryover-1', number: 2, date: '2026-11-19', carryoverFromId: previous.id, carryoverRootId: previous.id, carryoverSequence: 1 })
+  previous.carryoverToId = next.id
+  first.data.issues.push(next)
+  const before = structuredClone(previous)
+  const request = google([event({ etag: 'changed', summary: 'Google側の変更' })])
+  const second = await synchronizeCalendar(first.data, first.calendar, request, now)
+  expect(second.data.issues.find(issue => issue.id === previous.id)).toEqual(before)
+  expect(request.mock.calls.filter(([, init]) => init?.method).map(([, init]) => init?.method)).toEqual(['POST'])
+  const cancelled = google([event({ status: 'cancelled' })])
+  const third = await synchronizeCalendar(second.data, second.calendar, cancelled, now)
+  expect(third.data.issues.find(issue => issue.id === previous.id)).toEqual(before)
+  expect(cancelled.mock.calls.some(([, init]) => init?.method === 'DELETE' || init?.method === 'PATCH')).toBe(false)
+})
 it('removes an unplaced event without deleting the task and can place it again with a new Google ID', async () => {
   const data = initialSyncData(1); data.issues = [fixtureIssue()]; data.projects[0].nextNumber = 2
   const insert = google([])

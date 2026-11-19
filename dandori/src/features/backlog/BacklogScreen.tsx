@@ -12,6 +12,8 @@ import { EMPTY_FILTER, isFilterActive, matchesFilter, type IssueFilter } from '.
 import { MoveSheet } from './MoveSheet'
 import { groupBoardIssues } from '../board/recurringGroups'
 import { RecurringBoardCard } from '../board/RecurringBoardCard'
+import { CarryoverTrail } from '../board/CarryoverTrail'
+import { currentWork } from '../../lib/carryover'
 
 export function BacklogScreen() {
   const project = useDataStore(selectCurrentProject)
@@ -68,12 +70,13 @@ export function BacklogScreen() {
           <RecurringBoardCard group={group} rule={recurrenceRules.find((rule) => rule.id === issue.recurrenceId)}
             relatedIssues={issues} statuses={statuses} doneIds={doneIds} pulse={false} onOpen={setEditing} onToggleDone={toggle} onChangeStatus={changeStatus} />
         </li>
-        const children = issues.filter((child) => child.parentId === issue.id)
+        const children = currentWork(issues).filter((child) => child.parentId === issue.id)
         return <li key={group.key}>
           {allMonths && <span className="mb-1 block text-[10px] text-muted">{issueMonth(issue)}</span>}
           <BacklogRow issue={issue} done={doneIds.has(issue.statusId)} statusName={statuses.find((status) => status.id === issue.statusId)?.name ?? ''}
             parentIssue={issues.find((parent) => parent.id === issue.parentId)} childCount={children.length} childDoneCount={children.filter((child) => doneIds.has(child.statusId)).length}
             onOpen={() => setEditing(issue)} onMove={() => setMoving(issue)} onToggleDone={() => void toggle(issue.id)} />
+          <CarryoverTrail issue={issue} issues={issues} onOpen={setEditing} />
         </li>
       })}
     </ul>}

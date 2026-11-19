@@ -5,10 +5,11 @@ import { isValidMonth, issueMonth } from '../lib/month'
 import { todayStr } from '../lib/date'
 import { syncParentStatuses } from './issueRepo'
 import type { Issue, MonthlySnapshot } from './types'
+import { currentWork } from '../lib/carryover'
 
 /* 親と子の作業を二重に数えないよう、集計は末端のタスクだけを対象にする。 */
 export function monthlyWork(issues: Issue[], month: string, doneIds: Set<string>) {
-  const active = issues.filter((issue) => issue.deletedAt === null)
+  const active = currentWork(issues)
   const parents = new Set(active.map((issue) => issue.parentId))
   const work = active.filter((issue) => issueMonth(issue) === month && issue.type !== 'epic' && !parents.has(issue.id))
   return { totalCount: work.length, remainingCount: work.filter((issue) => !doneIds.has(issue.statusId)).length }
@@ -24,6 +25,7 @@ export async function prepareMonthlyProject(projectId: string, selectedMonth: st
     const month = today.slice(0, 7)
     const all = await db.issues.where('projectId').equals(projectId).toArray()
     for (const issue of all) {
+      if (issue.carryoverToId) continue
       const originalMonth = issueMonth(issue)
       const targetMonth = issue.deletedAt === null && !doneIds.has(issue.statusId) && originalMonth < month ? month : originalMonth
       if (!issue.planningMonth || issue.planningMonth !== targetMonth || issue.sprintId !== null) {
