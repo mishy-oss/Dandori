@@ -52,11 +52,12 @@ export async function syncParentStatuses(ids: (string | null)[], timestamp: numb
       seen.add(parentId)
       const parent = await getIssue(parentId)
       if (!parent) break
+      if (parent.carryoverToId) break
       const project = await getProject(parent.projectId)
       const workflow = project && await getWorkflow(project.workflowId)
       if (!workflow) break
       const children = await db.issues.where('parentId').equals(parent.id)
-        .filter((child) => child.deletedAt === null && child.projectId === parent.projectId).toArray()
+        .filter((child) => child.deletedAt === null && !child.carryoverToId && child.projectId === parent.projectId).toArray()
       if (children.length) {
         const categories = children.map((child) => workflow.statuses.find((s) => s.id === child.statusId)?.category)
         const category = categories.every((value) => value === 'done') ? 'done'
@@ -77,7 +78,7 @@ export async function syncParentStatuses(ids: (string | null)[], timestamp: numb
 }
 
 function activeInStatus(issues: Issue[], statusId: string): Issue[] {
-  return issues.filter((i) => i.deletedAt === null && i.statusId === statusId)
+  return issues.filter((i) => i.deletedAt === null && !i.carryoverToId && i.statusId === statusId)
 }
 
 function normalizeRecurrence(input: RecurrenceInput, startDate: string): Omit<RecurrenceRule, 'id' | 'projectId' | 'createdAt' | 'updatedAt'> {
@@ -260,7 +261,8 @@ export async function updateIssue(
   return db.transaction('rw', db.projects, db.workflows, db.issues, db.sprints, db.recurrenceRules, async () => {
     const current = await getIssue(id)
     if (!current) throw new Error('Issueが見つかりません')
-    if (issuePatch.parentId) await validateParent(current.projectId, issuePatch.parentId, id)
+    if (current.carryoverToId) throw new Error('持ち越し済みの配置は履歴です。持ち越し先を編集してください')
+    if (issuePatch.parentId && issuePatch.parentId !== current.parentId) await validateParent(current.projectId, issuePatch.parentId, id)
 
     const t = now()
     const next: Issue = {
@@ -284,7 +286,7 @@ export async function updateIssue(
       if (recurrencePatch === null) {
         if (existingRule) {
           await db.recurrenceRules.update(existingRule.id, { active: false, updatedAt: t })
-          await db.issues.where('recurrenceId').equals(existingRule.id).modify({ recurrenceId: null, updatedAt: t })
+          await db.issues.where('recurrenceId').equals(existingRule.id).filter(issue => !issue.carryoverToId).modify({ recurrenceId: null, updatedAt: t })
         }
         next.recurrenceId = null
       } else {
@@ -391,6 +393,7 @@ async function createNextOccurrence(completed: Issue, timestamp: number): Promis
 
   const nextIssue: Issue = {
     ...completed,
+    carryoverFromId: undefined, carryoverToId: undefined, carryoverRootId: undefined, carryoverSequence: undefined,
     id: newId(),
     number: project.nextNumber,
     statusId: todoStatus.id,
@@ -416,6 +419,7 @@ async function validateParent(projectId: string, parentId: string, issueId?: str
   const seen = new Set(issueId ? [issueId] : [])
   let parent = await getIssue(parentId)
   while (parent) {
+    if (parent.carryoverToId) throw new Error('持ち越し済みの履歴は親にできません')
     if (parent.projectId !== projectId) throw new Error('別のプロジェクトのIssueは親にできません')
     if (seen.has(parent.id)) throw new Error('親子関係が循環しています')
     seen.add(parent.id)
@@ -437,6 +441,7 @@ export async function moveIssue(
   return db.transaction('rw', db.projects, db.workflows, db.issues, db.sprints, db.recurrenceRules, async () => {
     const current = await getIssue(id)
     if (!current) throw new Error('Issueが見つかりません')
+    if (current.carryoverToId) throw new Error('持ち越し済みの配置は履歴です。持ち越し先を編集してください')
     const project = await getProject(current.projectId)
     const workflow = project && (await getWorkflow(project.workflowId))
     const status = workflow?.statuses.find((s) => s.id === statusId)
@@ -486,6 +491,7 @@ export async function deleteIssue(id: string): Promise<void> {
   await db.transaction('rw', db.projects, db.workflows, db.issues, db.sprints, db.recurrenceRules, async () => {
     const t = now()
     const current = await getIssue(id)
+    if (current?.carryoverToId) throw new Error('持ち越し済みの配置は履歴として残します')
     if (current) await createNextOccurrence(current, t)
     const toDelete = new Set<string>([id])
     let frontier = [id]
@@ -493,7 +499,7 @@ export async function deleteIssue(id: string): Promise<void> {
       const children = await db.issues
         .where('parentId')
         .anyOf(frontier)
-        .filter((i) => i.deletedAt === null && !toDelete.has(i.id))
+        .filter((i) => i.deletedAt === null && !i.carryoverToId && !toDelete.has(i.id))
         .toArray()
       frontier = children.map((c) => c.id)
       frontier.forEach((c) => toDelete.add(c))

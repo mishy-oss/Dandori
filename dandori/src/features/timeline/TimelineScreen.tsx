@@ -13,6 +13,8 @@ import { PX_PER_MIN, clampMove, nowMin, visibleRange, weekDays } from './timelin
 import { useNow } from './useNow'
 import { useTimelineGestures } from './useTimelineGestures'
 import { Icon } from '../../app/Icon'
+import { CarryoverDialog } from '../issue-editor/CarryoverDialog'
+import { currentWork } from '../../lib/carryover'
 
 type EditorState = { issue: Issue } | { create: { startMin: number | null } } | null
 
@@ -31,6 +33,7 @@ export function TimelineScreen() {
   const [selected, setSelected] = useState(() => todayStr())
   const [todayJump, setTodayJump] = useState(0)
   const [editor, setEditor] = useState<EditorState>(null)
+  const [carrying, setCarrying] = useState<Issue | null>(null)
   const [error, setError] = useState<string | null>(null)
   useEffect(() => {
     if (useDataStore.getState().selectedMonth !== selected.slice(0, 7)) void selectMonth(selected.slice(0, 7)).catch((cause) => setError(cause instanceof Error ? cause.message : String(cause)))
@@ -49,7 +52,7 @@ export function TimelineScreen() {
     [issues, selected],
   )
   const unplaced = useMemo(
-    () => issues.filter((issue) => issueMonth(issue) === selected.slice(0, 7) && issue.startMin === null && !issue.calendarAllDay && issue.type !== 'epic' && !doneIds.has(issue.statusId)),
+    () => currentWork(issues).filter((issue) => issueMonth(issue) === selected.slice(0, 7) && issue.startMin === null && !issue.calendarAllDay && issue.type !== 'epic' && !doneIds.has(issue.statusId)),
     [issues, selected, doneIds],
   )
   const range = useMemo(
@@ -69,6 +72,7 @@ export function TimelineScreen() {
     [settings.dayStartHour, settings.dayEndHour, scheduled, selected, todayJump],
   )
   const days = weekDays(selected, settings.weekStartsOn)
+  const overdue = currentWork(issues).filter(issue => issue.date && issue.date < selected && (issue.startMin !== null || issue.calendarAllDay) && issue.type !== 'epic' && !doneIds.has(issue.statusId))
   const marked = useMemo(
     () => new Set(issues.filter((i) => i.date !== null && i.startMin !== null).map((i) => i.date!)),
     [issues],
@@ -149,6 +153,13 @@ export function TimelineScreen() {
 
 
       <div className="timeline-sheet flex min-h-0 flex-1 flex-col">
+      {overdue.length > 0 && <details data-no-drag className="mx-4 shrink-0 rounded-xl border border-border bg-surface px-3 text-xs">
+        <summary className="min-h-11 cursor-pointer py-3">過去の未完了（{overdue.length}件）</summary>
+        <ul className="max-h-48 overflow-y-auto">{overdue.sort((a, b) => a.date!.localeCompare(b.date!)).map(issue => <li key={issue.id} className="flex items-center gap-2 border-t border-border">
+          <button type="button" className="min-h-11 min-w-0 flex-1 truncate text-left" onClick={() => setEditor({ issue })}>{issue.date} · {issue.title}</button>
+          <button type="button" className="min-h-11 shrink-0 px-2 text-accent" onClick={() => setCarrying(issue)}>この日へ持ち越す</button>
+        </li>)}</ul>
+      </details>}
       {issues.some(issue => issue.date === selected && issue.calendarAllDay) && <section aria-label="終日予定" className="flex shrink-0 flex-wrap gap-2 px-4 py-2">
         <span className="self-center text-xs text-muted">終日</span>
         {issues.filter(issue => issue.date === selected && issue.calendarAllDay).map(issue => <button key={issue.id} data-no-drag onClick={() => setEditor({ issue })} className="min-h-11 rounded-lg border border-border px-3 text-sm">{issue.title}</button>)}
@@ -210,6 +221,7 @@ export function TimelineScreen() {
           onClose={() => setEditor(null)}
         />
       )}
+      {carrying && <CarryoverDialog issue={carrying} targetDate={selected} onClose={() => setCarrying(null)} onCreated={next => { setCarrying(null); setEditor({ issue: next }) }} />}
     </div>
   )
 }

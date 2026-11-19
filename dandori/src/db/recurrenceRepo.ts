@@ -14,6 +14,7 @@ function nextDate(rule: RecurrenceRule, date: string): string {
 }
 
 export async function expandRecurrenceInMonth(source: Issue, month: string, timestamp: number): Promise<void> {
+  source = { ...source, carryoverFromId: undefined, carryoverToId: undefined, carryoverRootId: undefined, carryoverSequence: undefined }
   if (!source.recurrenceId) return
   const rule = await db.recurrenceRules.get(source.recurrenceId)
   if (!rule?.active) return
@@ -51,6 +52,7 @@ export async function expandRecurrenceInSprint(
   sprint: Sprint,
   timestamp: number,
 ): Promise<void> {
+  source = { ...source, carryoverFromId: undefined, carryoverToId: undefined, carryoverRootId: undefined, carryoverSequence: undefined }
   if (sprint.state === 'closed' || sprint.projectId !== source.projectId || !source.recurrenceId) return
   const rule = await db.recurrenceRules.get(source.recurrenceId)
   if (!rule?.active) return

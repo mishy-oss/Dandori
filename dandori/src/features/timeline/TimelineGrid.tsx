@@ -61,7 +61,7 @@ export function TimelineGrid({ gridRef, range, blocks, drag, trayDurationMin, no
           const narrow = layout.columns > 1
           const iconSize = Math.min(44, blockHeight)
           return (
-            <div key={issue.id} role="button" tabIndex={0} data-block-id={issue.id} aria-label={`${issue.title} ${formatMin(startMin)}から${durationMin}分`}
+            <div key={issue.id} role="button" tabIndex={0} data-block-id={issue.carryoverToId ? undefined : issue.id} data-no-drag={issue.carryoverToId ? true : undefined} aria-label={`${issue.title} ${formatMin(startMin)}から${durationMin}分${issue.carryoverToId ? ' 持ち越し済み' : ''}`}
               onClick={() => { if (!shouldSuppressClick()) onOpen(issue) }}
               onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onOpen(issue) } }}
               className={`timeline-block group absolute touch-pan-y select-none rounded-2xl text-left [-webkit-touch-callout:none] ${active ? 'z-20 bg-surface shadow-lg ring-1 ring-accent/40' : 'z-10'} ${done ? 'opacity-45' : ''}`}
@@ -70,15 +70,16 @@ export function TimelineGrid({ gridRef, range, blocks, drag, trayDurationMin, no
               <div className="pointer-events-none absolute inset-y-0 flex min-w-0 flex-col justify-center gap-0.5" style={{ left: narrow ? 38 : 58, right: narrow ? 27 : 42 }}>
                 {!compact && <p className="truncate text-[10px] tabular-nums leading-snug text-muted">{formatMin(startMin)}–{formatMin(startMin + durationMin)} <span className="ml-1">{durationMin} 分</span></p>}
                 <p className={`${compact ? 'text-[10px]' : 'text-[13px]'} truncate font-semibold leading-snug tracking-[-0.015em] ${done ? 'line-through' : ''}`}>{issue.recurrenceId && <span className="mr-1 text-muted">↻</span>}{issue.title}</p>
+                {!compact && (issue.carryoverToId || issue.carryoverFromId) && <p className="truncate text-[10px] text-muted">{issue.carryoverToId ? '翌日以降へ持ち越し済み' : '過去の予定から持ち越し'}</p>}
               </div>
-              <button type="button" data-no-drag aria-label={done ? `${issue.title} を未完了に戻す` : `${issue.title} を完了にする`} aria-pressed={done}
+              <button type="button" data-no-drag disabled={!!issue.carryoverToId} aria-label={issue.carryoverToId ? `${issue.title} は持ち越し済み` : done ? `${issue.title} を未完了に戻す` : `${issue.title} を完了にする`} aria-pressed={done}
                 onClick={(event) => { event.stopPropagation(); onToggleDone(issue) }}
                 onKeyDown={(event) => event.stopPropagation()}
                 className="absolute inset-y-0 right-0 flex items-center justify-center" style={{ width: narrow ? 27 : 40 }}>
                 <span className="flex size-[19px] items-center justify-center rounded-full border-[1.5px]" style={{ borderColor: color, color: done ? 'white' : color, background: done ? color : 'var(--surface)' }}>{done && <Icon name="check" className="size-3" />}</span>
               </button>
-              <div data-resize-top-id={issue.id} aria-hidden className="absolute left-0 top-0 flex h-2 touch-none items-start justify-center" style={{ width: narrow ? 30 : 44 }}><span className="resize-grip mt-0.5 h-0.5 w-4 rounded-full bg-white" /></div>
-              <div data-resize-id={issue.id} aria-hidden className="absolute bottom-0 left-0 flex h-2 touch-none items-end justify-center" style={{ width: narrow ? 30 : 44 }}><span className="resize-grip mb-0.5 h-0.5 w-4 rounded-full bg-white" /></div>
+              {!issue.carryoverToId && <><div data-resize-top-id={issue.id} aria-hidden className="absolute left-0 top-0 flex h-2 touch-none items-start justify-center" style={{ width: narrow ? 30 : 44 }}><span className="resize-grip mt-0.5 h-0.5 w-4 rounded-full bg-white" /></div>
+              <div data-resize-id={issue.id} aria-hidden className="absolute bottom-0 left-0 flex h-2 touch-none items-end justify-center" style={{ width: narrow ? 30 : 44 }}><span className="resize-grip mb-0.5 h-0.5 w-4 rounded-full bg-white" /></div></>}
             </div>
           )
         })}

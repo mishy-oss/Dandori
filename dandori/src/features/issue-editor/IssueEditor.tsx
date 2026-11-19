@@ -7,6 +7,8 @@ import { selectCurrentProject, useDataStore } from '../../store/data'
 import { formatMin, parseTime } from '../timeline/timelineLogic'
 import { appendIssueLabel, scheduledEditorStatusId } from './issueEditorLogic'
 import { DeleteIssueDialog } from './DeleteIssueDialog'
+import { CarryoverDialog } from './CarryoverDialog'
+import { currentWork } from '../../lib/carryover'
 import { createScheduleInput, scheduleInputError, updateScheduleInput } from './scheduleInput'
 
 const FIELD =
@@ -14,7 +16,7 @@ const FIELD =
 const WEEKDAY_LABELS = ['日', '月', '火', '水', '木', '金', '土']
 
 export function IssueEditor({
-  issue,
+  issue: initialIssue,
   defaultStatusId,
   defaultPlanningMonth = currentMonth(),
   initialSchedule,
@@ -26,6 +28,7 @@ export function IssueEditor({
   initialSchedule?: { date: string | null; startMin: number | null }
   onClose: () => void
 }) {
+  const issue = useDataStore(state => initialIssue ? state.issues.find(item => item.id === initialIssue.id) ?? initialIssue : null)
   const project = useDataStore(selectCurrentProject)
   const scheduleHelpId = useId()
   const workflow = useDataStore((s) => (project ? s.workflows[project.workflowId] : undefined))
@@ -41,7 +44,7 @@ export function IssueEditor({
   const column = useMemo(
     () =>
       issue
-        ? issues.filter((i) => i.statusId === issue.statusId && issueMonth(i) === issueMonth(issue))
+        ? currentWork(issues).filter((i) => i.statusId === issue.statusId && issueMonth(i) === issueMonth(issue))
         : [],
     [issues, issue],
   )
@@ -52,6 +55,7 @@ export function IssueEditor({
   const [labels, setLabels] = useState<string[]>(issue?.labels ?? [])
   const [labelDraft, setLabelDraft] = useState('')
   const [showDelete, setShowDelete] = useState(false)
+  const [showCarryover, setShowCarryover] = useState(false)
   const [type, setType] = useState<IssueType>(issue?.type ?? 'task')
   const [priority, setPriority] = useState<Priority>(issue?.priority ?? 'medium')
   const [statusId, setStatusId] = useState(
@@ -100,8 +104,8 @@ export function IssueEditor({
     }
     return found
   }, [issues, issueId])
-  const parentOptions = issues.filter((i) => i.id !== issueId && !descendants.has(i.id))
-  const children = issueId ? issues.filter((i) => i.parentId === issueId) : []
+  const parentOptions = currentWork(issues).filter((i) => i.id !== issueId && !descendants.has(i.id))
+  const children = issueId ? currentWork(issues).filter((i) => i.parentId === issueId) : []
   const isRoutine = workflow?.statuses.find((status) => status.id === statusId)?.category === 'routine'
 
   async function reorder(delta: -1 | 1) {
@@ -197,6 +201,26 @@ export function IssueEditor({
     })
   }
 
+  if (issue?.carryoverToId) {
+    const destination = issues.find(item => item.id === issue.carryoverToId)
+    return <>
+      <div className={`${relatedIssue ? 'hidden' : 'flex'} fixed inset-0 z-40 items-end bg-black/50`} onClick={onClose}>
+        <section role="dialog" aria-modal="true" aria-label="持ち越し前の配置履歴" onClick={event => event.stopPropagation()} className="mx-auto flex max-h-[90%] w-full max-w-xl flex-col gap-3 overflow-y-auto rounded-t-2xl bg-surface p-4 pb-8">
+          <h2 className="font-bold">{formatIssueNumber(issue.number)} · 配置履歴</h2>
+          <p className="font-semibold">{issue.title}</p>
+          <p className="text-sm">{issue.date} · {issue.calendarAllDay ? '終日' : issue.startMin === null ? '未配置' : `${formatMin(issue.startMin)}〜${formatMin(issue.startMin + issue.durationMin)}`}</p>
+          <p className="text-sm text-muted">未完了 · {destination?.date ?? '後日'}へ持ち越し済み</p>
+          <p className="text-xs text-muted">当日の記録を残すため、履歴の変更・削除・完了操作はできません。残タスク数には持ち越し先だけを数えます。</p>
+          {issue.description && <p className="whitespace-pre-wrap break-words text-sm">{issue.description}</p>}
+          {issue.labels.length > 0 && <p className="text-xs text-muted">ラベル：{issue.labels.join('、')}</p>}
+          {destination ? <button type="button" className="min-h-11 rounded-lg bg-accent text-accent-text" onClick={() => setRelatedIssueId(destination.id)}>持ち越し先を開く</button> : <p className="text-xs text-muted">持ち越し先は削除されています。</p>}
+          <button type="button" className="min-h-11 rounded-lg border border-border" onClick={onClose}>閉じる</button>
+        </section>
+      </div>
+      {relatedIssue && <IssueEditor key={relatedIssue.id} issue={relatedIssue} onClose={onClose} />}
+    </>
+  }
+
   return (
     <><div className={`${relatedIssue ? 'hidden' : 'flex'} fixed inset-0 z-40 items-end bg-black/50`} onClick={onClose}>
       <form
@@ -211,6 +235,11 @@ export function IssueEditor({
         <h2 className="text-lg font-bold">
           {issue ? formatIssueNumber(issue.number) : '新規タスク'}
         </h2>
+        {issue?.carryoverFromId && <p className="text-xs text-muted">{issues.find(item => item.id === issue.carryoverFromId)?.date ?? '過去の予定'}から持ち越し</p>}
+        {issue?.date && !workflow?.statuses.some(status => status.id === issue.statusId && status.category === 'done') && <>
+          <button type="button" className="min-h-11 rounded-lg border border-accent px-3 text-sm text-accent" onClick={() => setShowCarryover(true)}>翌日以降へ持ち越す</button>
+          <p className="text-xs text-muted">持ち越しは保存済みの内容を引き継ぎます。編集中の変更は先に保存してください。</p>
+        </>}
 
 
 
@@ -599,6 +628,8 @@ export function IssueEditor({
       onDelete={() => deleteIssue(issue.id)}
       onClose={() => setShowDelete(false)}
       onDeleted={onClose} />}
+    {showCarryover && issue && <CarryoverDialog issue={issue} onClose={() => setShowCarryover(false)}
+      onCreated={next => { setShowCarryover(false); setRelatedIssueId(next.id) }} />}
     {relatedIssue && <IssueEditor key={relatedIssue.id} issue={relatedIssue}
       onClose={() => setRelatedIssueId(null)} />}
     </>
