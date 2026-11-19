@@ -102,6 +102,14 @@ export function isSyncData(value: unknown): value is SyncData {
     if (project.id !== 'account-project' || workflow.id !== 'account-workflow' || project.workflowId !== workflow.id || !finite(project.nextNumber) || !Array.isArray(workflow.statuses)) return false
     if (!['todo', 'doing', 'routine', 'done'].every(category => workflow.statuses.some(status => status.category === category)) || !workflow.statuses.every(status => id(status.id) && text(status.name, 100))) return false
     const statusIds = new Set(workflow.statuses.map(status => status.id)), issueIds = new Set(data.issues.map(issue => issue.id)), rules = new Set(data.recurrenceRules.map(rule => rule.id))
+    const byId = new Map(data.issues.map(issue => [issue.id, issue]))
+    if (!data.issues.every(row => {
+      if (row.carryoverToId !== undefined && (!id(row.carryoverToId) || row.carryoverToId === row.id || byId.get(row.carryoverToId)?.carryoverFromId !== row.id)) return false
+      if (row.carryoverFromId === undefined) return row.carryoverRootId === undefined && row.carryoverSequence === undefined
+      const source = byId.get(row.carryoverFromId)
+      return id(row.carryoverFromId) && source?.carryoverToId === row.id && row.carryoverRootId === (source.carryoverRootId ?? source.id) &&
+        row.carryoverSequence === (source.carryoverSequence ?? 0) + 1
+    })) return false
     if (!data.issues.every(row => row.projectId === project.id && Number.isInteger(row.number) && row.number > 0 && ISSUE_TYPES.includes(row.type) && PRIORITIES.includes(row.priority) && text(row.title, 1000) && (row.description === undefined || text(row.description)) && statusIds.has(row.statusId) && nullableId(row.parentId) && (!row.parentId || issueIds.has(row.parentId)) && Array.isArray(row.labels) && row.labels.length <= 100 && row.labels.every(label => text(label, 200)) && (row.date === null || date(row.date)) && (row.dueDate === null || date(row.dueDate)) && nullableNumber(row.startMin) && (row.startMin === null || (row.date !== null && row.startMin < 1440)) && finite(row.durationMin) && row.durationMin > 0 && row.durationMin <= 1440 && nullableNumber(row.deletedAt) && finite(row.updatedAt) && finite(row.createdAt) && text(row.rank, 200) && nullableId(row.recurrenceId) && (!row.recurrenceId || rules.has(row.recurrenceId)))) return false
     if (!data.recurrenceRules.every(row => row.projectId === project.id && ['daily','weekly','monthly'].includes(row.frequency) && Number.isInteger(row.interval) && row.interval > 0 && row.interval <= 1000 && date(row.startDate) && (row.endDate === null || date(row.endDate)) && typeof row.active === 'boolean' && (row.weekdays === undefined || (Array.isArray(row.weekdays) && row.weekdays.every(day => Number.isInteger(day) && day >= 0 && day <= 6))))) return false
     if (!data.sprints.every(row => row.projectId === project.id && date(row.startDate) && date(row.endDate) && Array.isArray(row.snapshots))) return false

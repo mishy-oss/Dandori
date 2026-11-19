@@ -11,6 +11,8 @@ import { wipStatus } from './boardLogic'
 import { useBoardGestures } from './useBoardGestures'
 import { groupBoardIssues, groupedDropIndex, type BoardIssueGroup } from './recurringGroups'
 import { RecurringBoardCard } from './RecurringBoardCard'
+import { CarryoverTrail } from './CarryoverTrail'
+import { currentWork } from '../../lib/carryover'
 
 export function BoardScreen() {
   const project = useDataStore(selectCurrentProject)
@@ -23,7 +25,7 @@ export function BoardScreen() {
   const toggleIssueDone = useDataStore((s) => s.toggleIssueDone)
 
   const issues = useMemo(
-    () => allIssues.filter((issue) => issueMonth(issue) === month),
+    () => currentWork(allIssues).filter((issue) => issueMonth(issue) === month),
     [allIssues, month],
   )
   const [columnIndex, setColumnIndex] = useState(0)
@@ -241,6 +243,7 @@ export function BoardScreen() {
                 }}
                 onToggleDone={() => void toggleDone(issue.id)}
               />
+              <CarryoverTrail issue={issue} issues={allIssues} onOpen={setEditing} />
             </li>
           )
         })}

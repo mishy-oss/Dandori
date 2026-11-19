@@ -52,7 +52,7 @@ export function App() {
         }
         const now = Date.now()
         const notifications = issues
-          .filter((issue) => !doneIds.has(issue.statusId) && issue.date && issue.startMin !== null && issue.reminderOffsetMin !== null)
+          .filter((issue) => !issue.carryoverToId && !doneIds.has(issue.statusId) && issue.date && issue.startMin !== null && issue.reminderOffsetMin !== null)
           .map((issue) => {
             const [year, month, day] = issue.date!.split('-').map(Number)
             const at = new Date(year, month - 1, day, 0, issue.startMin!).getTime() - issue.reminderOffsetMin! * 60_000

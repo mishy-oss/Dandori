@@ -74,6 +74,7 @@ export function BacklogRow({
             {issue.estimateMin ? ` · ${issue.estimateMin} 分` : ''}
           </span>
           <span className={done ? 'line-through opacity-60' : ''}>{issue.title}</span>
+          {issue.carryoverFromId && <span className="text-xs text-muted">過去の予定から持ち越し</span>}
           <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs">{statusName}</span>
           {parentIssue && (
             <span className="max-w-full truncate text-xs text-muted">

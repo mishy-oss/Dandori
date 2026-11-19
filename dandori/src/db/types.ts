@@ -67,6 +67,11 @@ export interface Issue {
   calendarSource?: string
   calendarReadOnly?: boolean
   calendarSeriesId?: string
+  /** 過去の配置を残しつつ、同じ作業の持ち越し先だけを進捗に数える。 */
+  carryoverFromId?: ID
+  carryoverToId?: ID
+  carryoverRootId?: ID
+  carryoverSequence?: number
   completedAt: number | null
   createdAt: number
   updatedAt: number

@@ -136,6 +136,8 @@ export async function synchronizeCalendar(input: SyncData, previous: CalendarSta
       const importedId = `g-${await digest(`${calendar.id}:${event.id}`)}`
       issue = data.issues.find(row => row.id === importedId)
     }
+    // 持ち越し元の配置は履歴として固定し、Google側の後日の変更でも上書きしない。
+    if (issue?.carryoverToId) continue
     const link = issue ? calendar.links[issue.id] : undefined
     if (link?.removed) continue
     if (event.status === 'cancelled') {
@@ -166,6 +168,7 @@ export async function synchronizeCalendar(input: SyncData, previous: CalendarSta
     if (!link || fingerprint(issue) === link.fingerprint || sameValue(fields(issue), value)) calendar.links[issue.id] = { eventId: event.id, etag: event.etag, fingerprint: fingerprint(issue), readOnly, seriesId: event.recurringEventId }
   }
   for (const issue of data.issues) {
+    if (issue.carryoverToId) continue
     if (issue.calendarSource && issue.calendarSource !== source) continue
     const savedLink = calendar.links[issue.id]
     const link = savedLink?.removed ? undefined : savedLink

@@ -158,3 +158,29 @@ it('uses the same recurring cards in the task tab and board', () => {
   const tasks = renderToStaticMarkup(createElement(BacklogScreen))
   expect(tasks).toContain('3件表示 / 4タスク')
 })
+
+it('shows one current carryover with an expandable history in board and task views', () => {
+  const previous = recurringTask('previous', { recurrenceId: null, title: '過去の配置', carryoverToId: 'current' })
+  const current = recurringTask('current', { recurrenceId: null, title: '現在の作業', number: 2, carryoverFromId: previous.id, carryoverRootId: previous.id, carryoverSequence: 1 })
+  useDataStore.setState({ issues: [previous, current] })
+  for (const Screen of [BoardScreen, BacklogScreen]) {
+    const html = renderToStaticMarkup(createElement(Screen))
+    expect(html).toContain('現在の作業')
+    expect(html).not.toContain('過去の配置')
+    expect(html).toContain('持ち越し履歴（1件）')
+  }
+  const history = renderToStaticMarkup(createElement(IssueEditor, { issue: previous, onClose: () => {} }))
+  expect(history).toContain('配置履歴')
+  expect(history).toContain('持ち越し先を開く')
+  expect(history).not.toContain('type="submit"')
+  expect(history).not.toContain('未配置に戻す')
+})
+
+it('offers a carryover entry point only for scheduled unfinished work', () => {
+  const issue = recurringTask('one', { recurrenceId: null })
+  useDataStore.setState({ issues: [issue] })
+  expect(renderToStaticMarkup(createElement(IssueEditor, { issue, onClose: () => {} }))).toContain('翌日以降へ持ち越す')
+  const completed = { ...issue, statusId: 'done' }
+  useDataStore.setState({ issues: [completed] })
+  expect(renderToStaticMarkup(createElement(IssueEditor, { issue: completed, onClose: () => {} }))).not.toContain('翌日以降へ持ち越す')
+})
