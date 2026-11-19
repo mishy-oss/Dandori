@@ -134,8 +134,15 @@ it('shows parent links, child progress and related editing controls', () => {
   expect(parentEditor).toContain('aria-label="子の作業を編集"')
   expect(parentEditor).toContain('aria-label="完了した子を編集"')
   expect(parentEditor).toContain('親のステータスは子タスクの進捗に連動します')
+  expect(parentEditor).toContain('aria-label="子の作業を親タスクから外す"')
+  expect(parentEditor).toContain('aria-label="完了した子を親タスクから外す"')
   const childEditor = renderToStaticMarkup(createElement(IssueEditor, { issue: child, onClose: () => {} }))
   expect(childEditor).toContain('親タスクを編集')
+  expect(childEditor).toContain('親を外す</button>')
+  expect(childEditor).toContain('解除はすぐに保存されます')
+  useDataStore.setState({ issues: [parent, { ...child, parentId: null }, completed] })
+  const detached = renderToStaticMarkup(createElement(IssueEditor, { issue: { ...child, parentId: null }, onClose: () => {} }))
+  expect(detached).not.toContain('親を外す</button>')
 })
 
 it('uses the same recurring cards in the task tab and board', () => {
@@ -183,4 +190,18 @@ it('offers a carryover entry point only for scheduled unfinished work', () => {
   const completed = { ...issue, statusId: 'done' }
   useDataStore.setState({ issues: [completed] })
   expect(renderToStaticMarkup(createElement(IssueEditor, { issue: completed, onClose: () => {} }))).not.toContain('翌日以降へ持ち越す')
+})
+
+it('defaults recurring edits to one occurrence and offers the future scope', () => {
+  const issue = recurringTask('scope')
+  useDataStore.setState({ issues: [issue] })
+  const html = renderToStaticMarkup(createElement(IssueEditor, { issue, onClose: () => {} }))
+  expect(html).toContain('変更する範囲')
+  expect(html).toContain('この回のみ')
+  expect(html).toContain('この回以降')
+  expect(html).toMatch(/type="radio"[^>]*checked=""/)
+  expect(html).toMatch(/<fieldset disabled=""[^>]*>[\s\S]*?繰り返し/)
+  const single = { ...issue, recurrenceId: null }
+  useDataStore.setState({ issues: [single] })
+  expect(renderToStaticMarkup(createElement(IssueEditor, { issue: single, onClose: () => {} }))).not.toContain('変更する範囲')
 })

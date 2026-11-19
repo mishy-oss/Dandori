@@ -112,6 +112,21 @@ export function isSyncData(value: unknown): value is SyncData {
     })) return false
     if (!data.issues.every(row => row.projectId === project.id && Number.isInteger(row.number) && row.number > 0 && ISSUE_TYPES.includes(row.type) && PRIORITIES.includes(row.priority) && text(row.title, 1000) && (row.description === undefined || text(row.description)) && statusIds.has(row.statusId) && nullableId(row.parentId) && (!row.parentId || issueIds.has(row.parentId)) && Array.isArray(row.labels) && row.labels.length <= 100 && row.labels.every(label => text(label, 200)) && (row.date === null || date(row.date)) && (row.dueDate === null || date(row.dueDate)) && nullableNumber(row.startMin) && (row.startMin === null || (row.date !== null && row.startMin < 1440)) && finite(row.durationMin) && row.durationMin > 0 && row.durationMin <= 1440 && nullableNumber(row.deletedAt) && finite(row.updatedAt) && finite(row.createdAt) && text(row.rank, 200) && nullableId(row.recurrenceId) && (!row.recurrenceId || rules.has(row.recurrenceId)))) return false
     if (!data.recurrenceRules.every(row => row.projectId === project.id && ['daily','weekly','monthly'].includes(row.frequency) && Number.isInteger(row.interval) && row.interval > 0 && row.interval <= 1000 && date(row.startDate) && (row.endDate === null || date(row.endDate)) && typeof row.active === 'boolean' && (row.weekdays === undefined || (Array.isArray(row.weekdays) && row.weekdays.every(day => Number.isInteger(day) && day >= 0 && day <= 6))))) return false
+    if (!data.issues.every(row => (row.recurrenceDate === undefined || date(row.recurrenceDate)) && (row.recurrenceSeriesId === undefined || id(row.recurrenceSeriesId)))) return false
+    if (!data.recurrenceRules.every(row => {
+      if (row.effectiveFrom !== undefined && !date(row.effectiveFrom)) return false
+      if (row.seriesId !== undefined && !id(row.seriesId)) return false
+      if (row.excludedDates !== undefined && (!Array.isArray(row.excludedDates) || row.excludedDates.length > 10_000 || !row.excludedDates.every(date))) return false
+      const value = row.template
+      return value === undefined || (value !== null && text(value.title, 1000) && (value.description === undefined || text(value.description)) &&
+        ISSUE_TYPES.includes(value.type) && PRIORITIES.includes(value.priority) && nullableId(value.parentId) && (!value.parentId || issueIds.has(value.parentId)) &&
+        Array.isArray(value.labels) && value.labels.length <= 100 && value.labels.every(label => text(label, 200)) &&
+        (value.date === null || date(value.date)) && (value.dueDate === null || date(value.dueDate)) &&
+        nullableNumber(value.startMin) && (value.startMin === null || Number.isInteger(value.startMin) && value.startMin < 1440) &&
+        Number.isInteger(value.durationMin) && value.durationMin >= 5 && value.durationMin <= 1440 && (value.startMin === null || value.startMin + value.durationMin <= 1440) &&
+        nullableNumber(value.reminderOffsetMin) && nullableNumber(value.estimateMin) && text(value.icon, 200) && text(value.color, 200) &&
+        (value.isRoutine === undefined || typeof value.isRoutine === 'boolean') && (value.calendarAllDay === undefined || typeof value.calendarAllDay === 'boolean'))
+    })) return false
     if (!data.sprints.every(row => row.projectId === project.id && date(row.startDate) && date(row.endDate) && Array.isArray(row.snapshots))) return false
     if (!data.monthlySnapshots.every(row => row.projectId === project.id && date(row.date) && finite(row.totalCount) && finite(row.remainingCount))) return false
     const settings = data.settings[0]

@@ -78,3 +78,37 @@ it('repairs existing parent statuses on reload', async () => {
   expect((await getIssue(parent.id))?.statusId).toBe(done)
   expect((await getIssue(root.id))?.statusId).toBe(done)
 })
+
+it('detaches a child without deleting its work or descendants and recalculates the former family', async () => {
+  const { projectId, root, parent, a, b, doing, done, todo } = await setup()
+  const grandchild = await createIssue({ projectId, title: 'Grandchild', parentId: a.id })
+  await updateIssue(b.id, { statusId: done })
+  await updateIssue(a.id, { description: '説明は残す', labels: ['仕事'], priority: 'high', date: '2026-11-19', startMin: 600, durationMin: 45 })
+  const before = (await getIssue(a.id))!
+  expect((await getIssue(parent.id))?.statusId).toBe(doing)
+  await updateIssue(a.id, { parentId: null })
+  const after = (await getIssue(a.id))!
+  expect({ ...after, updatedAt: before.updatedAt }).toEqual({ ...before, parentId: null })
+  expect(await getIssue(grandchild.id)).toMatchObject({ parentId: a.id, deletedAt: null })
+  expect((await getIssue(parent.id))?.statusId).toBe(done)
+  expect((await getIssue(root.id))?.statusId).toBe(done)
+  await updateIssue(grandchild.id, { statusId: done })
+  await updateIssue(b.id, { statusId: todo })
+  expect((await getIssue(parent.id))?.statusId).toBe(todo)
+  expect((await getIssue(a.id))?.statusId).toBe(done)
+  await deleteIssue(parent.id)
+  expect(await getIssue(a.id)).toBeDefined()
+  expect(await getIssue(grandchild.id)).toBeDefined()
+})
+
+it('preserves the last parent state after the final child is detached and permits manual progress', async () => {
+  const { parent, a, b, doing, done } = await setup()
+  await updateIssue(a.id, { statusId: doing })
+  await updateIssue(b.id, { parentId: null })
+  await updateIssue(a.id, { parentId: null })
+  expect((await getIssue(parent.id))?.statusId).toBe(doing)
+  await updateIssue(parent.id, { statusId: done })
+  expect((await getIssue(parent.id))?.statusId).toBe(done)
+  expect(await getIssue(a.id)).toMatchObject({ parentId: null, statusId: doing, deletedAt: null })
+  expect(await getIssue(b.id)).toMatchObject({ parentId: null, deletedAt: null })
+})
