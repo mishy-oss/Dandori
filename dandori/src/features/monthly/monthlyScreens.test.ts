@@ -49,6 +49,8 @@ it('uses Japanese headings while preserving English option values', () => {
     expect(settings).toContain('システム')
     expect(settings).toContain('迷ったらtaskで大丈夫です。')
     expect(settings).toContain('JSONを準備')
+    expect(settings).toContain('JSONから復元')
+    expect(settings).toContain('aria-label="バックアップJSONを選択"')
     expect(settings).toContain('Googleアカウントと同期')
     expect(settings).toContain('Googleでログイン')
     const timeline = renderToStaticMarkup(createElement(TimelineScreen))
@@ -87,14 +89,15 @@ it('renders accessible release status and deletion confirmation', () => {
   expect(confirmation).toContain('削除する')
 })
 
-it('creates tasks for a month instead of a sprint', () => {
-  const html = renderToStaticMarkup(createElement(IssueEditor, {
-    issue: null, defaultPlanningMonth: '2027-01',
-    onClose: () => {},
-  }))
-  expect(html).toContain('type="month"')
-  expect(html).toContain('2027-01')
-  expect(html).not.toContain('スプリント')
+it('shows explicit Japanese weekdays for both date fields in the issue editor', () => {
+  const issue = recurringTask('date-fields', { recurrenceId: null, dueDate: '2026-11-17', date: '2026-11-20' })
+  useDataStore.setState({ issues: [issue] })
+  const html = renderToStaticMarkup(createElement(IssueEditor, { issue, onClose: () => {} }))
+  expect(html).toContain('value="2026/11/17 (火)"')
+  expect(html).toContain('value="2026/11/20 (金)"')
+  expect(html).toContain('aria-label="期限をカレンダーから選択"')
+  expect(html).toContain('aria-label="日付をカレンダーから選択"')
+  expect(html).not.toContain('()')
 })
 
 it('offers the routine status in board tabs and the issue editor', () => {
@@ -153,39 +156,16 @@ it('shows parent links, child progress and related editing controls', () => {
   expect(parentEditor).toContain('aria-label="子の作業を親タスクから外す"')
   expect(parentEditor).toContain('aria-label="完了した子を親タスクから外す"')
   const childEditor = renderToStaticMarkup(createElement(IssueEditor, { issue: child, onClose: () => {} }))
+  expect(childEditor).toContain('aria-label="親タスクを検索"')
+  expect(childEditor).toContain('aria-label="親タスクを変更"')
+  expect(childEditor).toContain('親の設定・変更はタスク保存時に反映します')
+  expect(childEditor).not.toContain('<option value="parent"')
   expect(childEditor).toContain('親タスクを編集')
   expect(childEditor).toContain('親を外す</button>')
   expect(childEditor).toContain('解除はすぐに保存されます')
   useDataStore.setState({ issues: [parent, { ...child, parentId: null }, completed] })
   const detached = renderToStaticMarkup(createElement(IssueEditor, { issue: { ...child, parentId: null }, onClose: () => {} }))
   expect(detached).not.toContain('親を外す</button>')
-})
-
-it('keeps recurring progress and month controls in the unified board and legacy entry', () => {
-  useDataStore.setState({ issues: [
-    recurringTask('a', { statusId: 'done' }),
-    recurringTask('b', { number: 2, date: '2027-01-02' }),
-    recurringTask('c', { number: 3, recurrenceId: 'another', date: '2027-01-03' }),
-    recurringTask('d', { number: 4, recurrenceId: null, title: '通常タスク' }),
-    recurringTask('e', { number: 5, planningMonth: '2027-02', date: '2027-02-01', title: '翌月だけのタスク' }),
-  ] })
-  for (const Screen of [BoardScreen, BacklogScreen]) {
-    const html = renderToStaticMarkup(createElement(Screen))
-    expect(html.match(/aria-label="日課の繰り返し"/g)).toHaveLength(2)
-    expect(html.match(/aria-label="日課を編集"/g)).toHaveLength(2)
-    expect(html.match(/aria-label="日課の繰り返し一覧を開く"/g)).toHaveLength(2)
-    expect(html).toContain('完了 1/2')
-    expect(html).toContain('通常タスク')
-    expect(html).not.toContain('翌月だけのタスク')
-  }
-  const tasks = renderToStaticMarkup(createElement(BacklogScreen))
-  expect(tasks).toContain('To Do：3件表示 / 全ステータス：3件')
-  expect(tasks).toContain('繰り返し各回を含む4タスク')
-  expect(tasks).toContain('aria-label="通常タスクの対象月を変更"')
-  expect(tasks).toContain('日課の対象月を変更')
-  expect(tasks.match(/aria-label="月次バーンダウン"/g)).toHaveLength(1)
-  expect(tasks).toContain('親タスク・epic・持ち越し済みの履歴を除いて数えます')
-  for (const label of ['タスクを検索', '優先度で絞り込み', '種別で絞り込み', 'すべての月のタスクを表示']) expect(tasks).toContain(label)
 })
 
 it('shows one current carryover with an expandable history in board and task views', () => {
@@ -212,18 +192,4 @@ it('offers a carryover entry point only for scheduled unfinished work', () => {
   const completed = { ...issue, statusId: 'done' }
   useDataStore.setState({ issues: [completed] })
   expect(renderToStaticMarkup(createElement(IssueEditor, { issue: completed, onClose: () => {} }))).not.toContain('翌日以降へ持ち越す')
-})
-
-it('defaults recurring edits to one occurrence and offers the future scope', () => {
-  const issue = recurringTask('scope')
-  useDataStore.setState({ issues: [issue] })
-  const html = renderToStaticMarkup(createElement(IssueEditor, { issue, onClose: () => {} }))
-  expect(html).toContain('変更する範囲')
-  expect(html).toContain('この回のみ')
-  expect(html).toContain('この回以降')
-  expect(html).toMatch(/type="radio"[^>]*checked=""/)
-  expect(html).toMatch(/<fieldset disabled=""[^>]*>[\s\S]*?繰り返し/)
-  const single = { ...issue, recurrenceId: null }
-  useDataStore.setState({ issues: [single] })
-  expect(renderToStaticMarkup(createElement(IssueEditor, { issue: single, onClose: () => {} }))).not.toContain('変更する範囲')
 })

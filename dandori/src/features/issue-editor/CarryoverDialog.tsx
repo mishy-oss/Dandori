@@ -4,6 +4,7 @@ import { addDaysStr, todayStr } from '../../lib/date'
 import { useDataStore } from '../../store/data'
 import { formatMin, parseTime } from '../timeline/timelineLogic'
 import { createScheduleInput, scheduleInputError, updateScheduleInput } from './scheduleInput'
+import { DateField } from '../../app/DateField'
 
 const FIELD = 'min-h-11 w-full min-w-0 rounded-lg border border-border bg-surface-2 px-3 text-base'
 
@@ -37,7 +38,7 @@ export function CarryoverDialog({ issue, targetDate, onClose, onCreated }: {
       <p className="break-words text-sm">{issue.title}</p>
       <p className="text-xs text-muted">元の配置は未完了の履歴として残します。未完了の子タスクも引き継ぎ、子タスクの時刻は持ち越し先で設定できます。</p>
       <fieldset disabled={busy} className="flex flex-col gap-3">
-        <label className="flex flex-col gap-1 text-sm">持ち越し先の日付<input required type="date" min={addDaysStr(issue.date!, 1)} className={FIELD} value={date} onChange={event => setDate(event.target.value)} /></label>
+        <div className="flex flex-col gap-1 text-sm">持ち越し先の日付<DateField label="持ち越し先の日付" required min={addDaysStr(issue.date!, 1)} className={FIELD} value={date} onChange={setDate} /></div>
         {issue.calendarAllDay ? <p className="text-sm">終日予定として引き継ぎます。</p> : <div className="grid grid-cols-2 gap-2">
           <label className="flex min-w-0 flex-col gap-1 text-sm">開始時刻<input type="time" step={60} className={FIELD} value={schedule.startTime} onChange={event => setSchedule(current => updateScheduleInput(current, 'startTime', event.target.value))} /></label>
           <label className="flex min-w-0 flex-col gap-1 text-sm">終了時刻<input type="time" step={60} className={FIELD} value={schedule.endTime === '24:00' ? '00:00' : schedule.endTime} onChange={event => setSchedule(current => updateScheduleInput(current, 'endTime', event.target.value === '00:00' ? '24:00' : event.target.value))} /></label>

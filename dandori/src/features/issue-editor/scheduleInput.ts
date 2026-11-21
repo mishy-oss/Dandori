@@ -1,4 +1,5 @@
 import { formatMin, parseTime } from '../timeline/timelineLogic'
+import { durationError } from '../../lib/schedule'
 
 export interface ScheduleInput {
   startTime: string
@@ -40,11 +41,17 @@ export function updateScheduleInput(
 }
 
 export function scheduleInputError(input: ScheduleInput): string | null {
+  if (input.basis === 'duration') {
+    if (!input.duration.trim()) return '所要時間を入力してください'
+    const error = durationError(Number(input.duration))
+    if (error) return error
+  }
   if (!input.startTime && !input.endTime) return null
   const start = parseTime(input.startTime)
   if (start === null) return '開始時刻を正しく入力してください'
+  if (input.basis === 'duration' && start + Number(input.duration) > 1440) return 'この所要時間では終了が24:00を超えます。日付をまたぐ予定は配置できません'
   const end = parseEndTime(input.endTime)
-  if (end === null) return '終了時刻を選択してください。日付をまたぐ予定は配置できません'
+  if (end === null) return '終了時刻を正しく入力してください'
   if (end <= start) return '終了時刻は開始時刻より後にしてください'
   if (end - start < 5) return '所要時間は5分以上にしてください'
   return null

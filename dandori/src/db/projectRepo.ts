@@ -1,3 +1,4 @@
+import { inTransaction } from './transaction'
 import { db } from './db'
 import { newId, now } from '../lib/id'
 import type { Project, Workflow, WorkflowStatus } from './types'
@@ -47,7 +48,7 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
     throw new Error('キーは英大文字で始まる2〜10文字の英数字にしてください')
   }
 
-  return db.transaction('rw', db.projects, db.workflows, async () => {
+  return inTransaction(db, 'rw', [db.projects, db.workflows], async () => {
     const dup = (await db.projects.where('key').equals(key).toArray()).some(
       (p) => p.deletedAt === null,
     )
@@ -80,7 +81,7 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
 
 // 起動時に呼ぶ。プロジェクトが無ければ既定のものを作る(同時に2回呼ばれても1つしか作らない)
 export async function ensureDefaultProject(): Promise<Project> {
-  return db.transaction('rw', db.projects, db.workflows, async () => {
+  return inTransaction(db, 'rw', [db.projects, db.workflows], async () => {
     const existing = await listProjects()
     return existing[0] ?? createProject(DEFAULT_PROJECT)
   })
@@ -95,7 +96,7 @@ export async function updateProject(
   if (patch.name !== undefined && !name) {
     throw new Error('プロジェクト名を入力してください')
   }
-  return db.transaction('rw', db.projects, async () => {
+  return inTransaction(db, 'rw', [db.projects], async () => {
     const p = await getProject(id)
     if (!p) throw new Error('プロジェクトが見つかりません')
     const next: Project = {
@@ -110,7 +111,7 @@ export async function updateProject(
 }
 
 export async function deleteProject(id: string): Promise<void> {
-  await db.transaction('rw', db.projects, db.workflows, db.issues, db.sprints, async () => {
+  await inTransaction(db, 'rw', [db.projects, db.workflows, db.issues, db.sprints], async () => {
     const p = await getProject(id)
     if (!p) return
     const t = now()
@@ -146,7 +147,7 @@ export async function updateWorkflowStatuses(
     }
   }
 
-  return db.transaction('rw', db.workflows, db.projects, db.issues, async () => {
+  return inTransaction(db, 'rw', [db.workflows, db.projects, db.issues], async () => {
     const w = await getWorkflow(workflowId)
     if (!w) throw new Error('ワークフローが見つかりません')
 

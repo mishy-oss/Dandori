@@ -14,6 +14,7 @@ const PATHS = {
   flag: 'M5 22V3m0 1c5-4 9 4 15 0v10c-6 4-10-4-15 0',
   leaf: 'M5 19C-2 8 10 2 21 3c0 13-7 21-16 16Zm0 0L16 8',
   clock: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18m0 4v6l4 2',
+  calendar: 'M4 5h16v16H4zM8 2v6m8-6v6M4 10h16',
 } as const
 
 export type IconName = keyof typeof PATHS

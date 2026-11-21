@@ -177,7 +177,7 @@ export function TimelineScreen() {
         </p>
       )}
 
-      <div ref={scrollerRef} className="timeline-scroller min-h-0 flex-1 overflow-y-auto pb-28 pt-3">
+      <div ref={scrollerRef} className="timeline-scroller min-h-0 flex-1 overflow-auto pb-28 pt-3">
         <TimelineGrid
           gridRef={gridRef}
           range={range}

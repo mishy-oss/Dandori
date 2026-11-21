@@ -1,3 +1,4 @@
+import { inTransaction } from './transaction'
 import { db } from './db'
 import { newId, now } from '../lib/id'
 import { compareRank, rankAfter, rankBetween, ranksForCount } from '../lib/rank'
@@ -158,9 +159,7 @@ export async function createIssue(input: CreateIssueInput): Promise<Issue> {
   if (!title) throw new Error('タイトルを入力してください')
   if (input.planningMonth !== undefined && !isValidMonth(input.planningMonth)) throw new Error('対象月を正しく指定してください')
 
-  return db.transaction(
-    'rw', db.projects, db.workflows, db.issues, db.sprints, db.recurrenceRules,
-    async () => {
+  return inTransaction(db, 'rw', [db.projects, db.workflows, db.issues, db.sprints, db.recurrenceRules], async () => {
     const project = await getProject(input.projectId)
     if (!project) throw new Error('プロジェクトが見つかりません')
     const workflow = await getWorkflow(project.workflowId)
@@ -247,8 +246,7 @@ export async function createIssue(input: CreateIssueInput): Promise<Issue> {
     if (recurrenceRule && issue.planningMonth && !issue.sprintId) await expandRecurrenceInMonth(issue, issue.planningMonth, t)
     await syncParentStatuses([issue.parentId], t)
     return issue
-    },
-  )
+    })
 }
 
 export async function updateIssue(
@@ -262,7 +260,7 @@ export async function updateIssue(
     throw new Error('タイトルを入力してください')
   }
 
-  return db.transaction('rw', db.projects, db.workflows, db.issues, db.sprints, db.recurrenceRules, async () => {
+  return inTransaction(db, 'rw', [db.projects, db.workflows, db.issues, db.sprints, db.recurrenceRules], async () => {
     const current = await getIssue(id)
     if (!current) throw new Error('Issueが見つかりません')
     if (current.carryoverToId) throw new Error('持ち越し済みの配置は履歴です。持ち越し先を編集してください')
@@ -420,10 +418,6 @@ async function createNextOccurrence(completed: Issue, timestamp: number): Promis
   await db.projects.update(project.id, { nextNumber: project.nextNumber + 1, updatedAt: timestamp })
 }
 
-export async function stopRecurrence(id: string): Promise<void> {
-  await db.recurrenceRules.update(id, { active: false, updatedAt: now() })
-}
-
 async function validateParent(projectId: string, parentId: string, issueId?: string): Promise<void> {
   const seen = new Set(issueId ? [issueId] : [])
   let parent = await getIssue(parentId)
@@ -447,7 +441,7 @@ export async function moveIssue(
   scopeSprintId?: string | null,
   scopeMonth?: string,
 ): Promise<Issue> {
-  return db.transaction('rw', db.projects, db.workflows, db.issues, db.sprints, db.recurrenceRules, async () => {
+  return inTransaction(db, 'rw', [db.projects, db.workflows, db.issues, db.sprints, db.recurrenceRules], async () => {
     const current = await getIssue(id)
     if (!current) throw new Error('Issueが見つかりません')
     if (current.carryoverToId) throw new Error('持ち越し済みの配置は履歴です。持ち越し先を編集してください')
@@ -497,7 +491,7 @@ export async function moveIssue(
 }
 
 export async function deleteIssue(id: string): Promise<void> {
-  await db.transaction('rw', db.projects, db.workflows, db.issues, db.sprints, db.recurrenceRules, async () => {
+  await inTransaction(db, 'rw', [db.projects, db.workflows, db.issues, db.sprints, db.recurrenceRules], async () => {
     const t = now()
     const current = await getIssue(id)
     if (current?.carryoverToId) throw new Error('持ち越し済みの配置は履歴として残します')

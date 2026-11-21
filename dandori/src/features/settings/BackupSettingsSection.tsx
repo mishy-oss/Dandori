@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createBackup } from '../../db/backupRepo'
 import { useDataStore } from '../../store/data'
 import { useThemeStore } from '../../store/theme'
+import { BackupImportSection } from './BackupImportSection'
 
 interface BackupDownload {
   url: string
@@ -81,5 +82,6 @@ export function BackupSettingsSection() {
     </div>
     {message && <p role="status" className="mt-3 text-sm text-muted">{message}</p>}
     {error && <p role="alert" className="mt-3 text-sm text-red-500">{error}</p>}
+    <BackupImportSection disabled={busy} />
   </section>
 }
