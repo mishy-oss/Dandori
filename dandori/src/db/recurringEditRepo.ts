@@ -6,6 +6,7 @@ import { addDaysStr } from '../lib/date'
 import { monthRange } from '../lib/month'
 import { recurrenceTemplate, ruleDates } from '../lib/recurrence'
 import type { RecurrenceRule } from './types'
+import { existingIssueLabels, normalizeIssueLabels } from '../lib/labels'
 
 export type RecurringEditScope = 'single' | 'future'
 const SHARED_FIELDS = ['title', 'description', 'type', 'priority', 'labels', 'startMin', 'durationMin', 'calendarAllDay', 'reminderOffsetMin', 'dueDate', 'estimateMin', 'icon', 'color'] as const
@@ -20,6 +21,10 @@ export async function editRecurringIssue(id: string, patch: IssuePatch, scope: R
     if (!current) throw new Error('タスクが見つかりません')
     if (scope === 'future' && current.recurrenceId !== captured?.recurrenceId) throw new Error('繰り返し設定が変更されました。画面を開き直してください')
     if (current.carryoverToId) throw new Error('持ち越し済みの配置は履歴です')
+    if (patch.labels !== undefined) {
+      const issues = await db.issues.where('projectId').equals(current.projectId).toArray()
+      patch = { ...patch, labels: normalizeIssueLabels(patch.labels, existingIssueLabels(issues, current.projectId)) }
+    }
     const rule = current.recurrenceId ? await db.recurrenceRules.get(current.recurrenceId) : undefined
     if (!rule) return updateIssue(id, patch)
     const timestamp = Date.now()

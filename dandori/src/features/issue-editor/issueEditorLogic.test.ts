@@ -23,6 +23,28 @@ it('persists labels from editor input and makes them searchable', async () => {
   expect(matchesFilter(updated, { ...EMPTY_FILTER, query: '仕事' })).toBe(true)
 })
 
+it('reuses existing labels for creation, updates and saving an unconfirmed label draft', async () => {
+  const project = await createProject({ key: 'APP', name: 'App' })
+  const first = await createIssue({ projectId: project.id, title: '元のタスク', labels: ['API', '仕事'] })
+  const draft = appendIssueLabel(['仕事'], '  ａｐｉ  ', first.labels)
+  expect(draft).toEqual(['仕事', 'API'])
+  const second = await createIssue({ projectId: project.id, title: '新しいタスク', labels: ['api', 'ＡＰＩ', ' 仕事 ', 'Web　 会議', ''] })
+  expect(second.labels).toEqual(['API', '仕事', 'Web 会議'])
+  const updated = await updateIssue(second.id, { labels: ['Ａｐｉ', 'api', '新規'] })
+  expect(updated.labels).toEqual(['API', '新規'])
+  expect((await getIssue(first.id))?.labels).toEqual(['API', '仕事'])
+  expect(appendIssueLabel(updated.labels, ' api ', first.labels)).toEqual(updated.labels)
+})
+
+it('does not rewrite legacy labels on unrelated updates and searches their variants consistently', async () => {
+  const project = await createProject({ key: 'APP', name: 'App' })
+  const issue = await createIssue({ projectId: project.id, title: '旧データ' })
+  await db.issues.update(issue.id, { labels: ['  ＡＰＩ　連携  '] })
+  const saved = await updateIssue(issue.id, { title: 'タイトルだけ変更' })
+  expect(saved.labels).toEqual(['  ＡＰＩ　連携  '])
+  expect(matchesFilter(saved, { ...EMPTY_FILTER, query: 'api  連携' })).toBe(true)
+})
+
 it('starts an already placed todo task when the form changes its time', async () => {
   const project = await createProject({ key: 'APP', name: 'App' })
   const { statuses } = (await getWorkflow(project.workflowId))!

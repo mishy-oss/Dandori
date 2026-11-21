@@ -1,10 +1,9 @@
 import type { WorkflowStatus } from '../../db/types'
+import { normalizeIssueLabels } from '../../lib/labels'
 
 /* 既存ラベルにカンマを含められるため、区切り文字では分割しない。 */
-export function appendIssueLabel(labels: string[], input: string): string[] {
-  const label = input.trim()
-  if (!label || labels.includes(label)) return labels
-  return [...labels, label]
+export function appendIssueLabel(labels: string[], input: string, existing: string[] = []): string[] {
+  return normalizeIssueLabels([...labels, input], existing)
 }
 
 /* タイトルなどの編集で手動の状態を上書きしないよう、日時の配置・変更だけを自動変更の対象にする。 */
