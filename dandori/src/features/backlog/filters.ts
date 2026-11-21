@@ -1,5 +1,6 @@
 import type { Issue, IssueType, Priority } from '../../db/types'
 import { formatIssueNumber } from '../../lib/issueNumber'
+import { labelKey } from '../../lib/labels'
 
 export interface IssueFilter {
   query: string
@@ -20,5 +21,5 @@ export function matchesFilter(issue: Issue, f: IssueFilter): boolean {
   const q = f.query.trim().toLowerCase()
   if (!q) return true
   const haystack = [issue.title, formatIssueNumber(issue.number), ...issue.labels].join('\n').toLowerCase()
-  return haystack.includes(q)
+  return haystack.includes(q) || issue.labels.some(label => labelKey(label).includes(labelKey(q)))
 }

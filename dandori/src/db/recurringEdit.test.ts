@@ -20,6 +20,18 @@ async function setup() {
 }
 async function occurrence(projectId: string, date: string) { return (await listIssues(projectId)).find(issue => issue.date === date)! }
 
+it('uses canonical labels in future occurrences and the generation template', async () => {
+  const { project } = await setup()
+  await createIssue({ projectId: project.id, title: '既存ラベル', labels: ['API'] })
+  const target = await occurrence(project.id, '2027-01-10')
+  const saved = await editRecurringIssue(target.id, { labels: [' ａｐｉ ', 'ＡＰＩ'] }, 'future')
+  expect(saved.labels).toEqual(['API'])
+  expect((await db.recurrenceRules.get(saved.recurrenceId!))?.template?.labels).toEqual(['API'])
+  expect((await occurrence(project.id, '2027-01-11')).labels).toEqual(['API'])
+  await prepareMonthlyProject(project.id, '2027-02', '2027-01-10')
+  expect((await occurrence(project.id, '2027-02-01')).labels).toEqual(['API'])
+})
+
 it('keeps a single exception out of existing and newly generated occurrences', async () => {
   const { project } = await setup()
   const target = await occurrence(project.id, '2027-01-10')

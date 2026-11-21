@@ -121,6 +121,22 @@ function recurringTask(id: string, patch: Partial<Issue> = {}): Issue {
   }
 }
 
+it('offers existing labels in new and edit forms without suggesting selected or deleted labels', () => {
+  const existing = recurringTask('first', { recurrenceId: null, labels: ['API', '仕事'], createdAt: 1 })
+  const editing = recurringTask('second', { recurrenceId: null, labels: [' ａｐｉ '], createdAt: 2 })
+  const deleted = recurringTask('deleted', { labels: ['削除済みラベル'], deletedAt: 1 })
+  useDataStore.setState({ issues: [existing, editing, deleted] })
+  const newForm = renderToStaticMarkup(createElement(IssueEditor, { issue: null, onClose: () => {} }))
+  expect(newForm).toContain('既存のラベルから選択')
+  expect(newForm).toContain('aria-label="APIのラベルを追加"')
+  expect(newForm).toContain('aria-label="仕事のラベルを追加"')
+  expect(newForm).not.toContain('削除済みラベルのラベルを追加')
+  const editForm = renderToStaticMarkup(createElement(IssueEditor, { issue: editing, onClose: () => {} }))
+  expect(editForm).toContain('aria-label="APIのラベルを削除"')
+  expect(editForm).not.toContain('aria-label="APIのラベルを追加"')
+  expect(editForm).toContain('aria-label="仕事のラベルを追加"')
+})
+
 it('shows parent links, child progress and related editing controls', () => {
   const parent = recurringTask('parent', { recurrenceId: null, title: '親の作業' })
   const child = recurringTask('child', { recurrenceId: null, parentId: parent.id, title: '子の作業' })
