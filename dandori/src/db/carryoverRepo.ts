@@ -1,3 +1,4 @@
+import { inTransaction } from './transaction'
 import { db } from './db'
 import { getIssue, syncParentStatuses } from './issueRepo'
 import { getProject, getWorkflow } from './projectRepo'
@@ -11,7 +12,7 @@ export interface CarryoverInput { date: string; startMin: number | null; duratio
 export async function carryoverIssue(id: string, input: CarryoverInput): Promise<Issue> {
   if (!isValidDateStr(input.date)) throw new Error('持ち越し先の日付を選択してください')
   validateSchedule(input.date, input.startMin, input.durationMin)
-  return db.transaction('rw', [db.projects, db.workflows, db.issues], async () => {
+  return inTransaction(db, 'rw', [db.projects, db.workflows, db.issues], async () => {
     const source = await getIssue(id)
     if (!source) throw new Error('タスクが見つかりません')
     if (source.carryoverToId) {

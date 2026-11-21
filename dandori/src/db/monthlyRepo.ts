@@ -1,3 +1,4 @@
+import { inTransaction } from './transaction'
 import { db } from './db'
 import { getProject, getWorkflow } from './projectRepo'
 import { expandRecurrenceInMonth } from './recurrenceRepo'
@@ -18,7 +19,7 @@ export function monthlyWork(issues: Issue[], month: string, doneIds: Set<string>
 
 export async function prepareMonthlyProject(projectId: string, selectedMonth: string, today = todayStr()): Promise<void> {
   if (!isValidMonth(selectedMonth)) throw new Error('対象月を正しく指定してください')
-  await db.transaction('rw', [db.projects, db.workflows, db.issues, db.recurrenceRules, db.monthlySnapshots], async () => {
+  await inTransaction(db, 'rw', [db.projects, db.workflows, db.issues, db.recurrenceRules, db.monthlySnapshots], async () => {
     const project = await getProject(projectId)
     const workflow = project && await getWorkflow(project.workflowId)
     if (!project || !workflow) return

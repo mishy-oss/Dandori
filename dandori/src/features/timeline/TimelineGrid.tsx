@@ -31,6 +31,7 @@ export function TimelineGrid({ gridRef, range, blocks, drag, trayDurationMin, no
     return { issue, startMin: issue.startMin!, durationMin: issue.durationMin }
   })
   const layouts = new Map(layoutBlocks(shown.map((item) => ({ id: item.issue.id, startMin: item.startMin, durationMin: item.durationMin }))).map((item) => [item.id, item]))
+  const maxColumns = Math.max(1, ...[...layouts.values()].map(layout => layout.columns))
   const firstHour = Math.ceil(range.startMin / 60)
   const hours = Array.from({ length: Math.floor(range.endMin / 60) - firstHour + 1 }, (_, index) => firstHour + index)
 
@@ -41,7 +42,7 @@ export function TimelineGrid({ gridRef, range, blocks, drag, trayDurationMin, no
   }
 
   return (
-    <div className="relative ml-11 mr-4" style={{ height }}>
+    <div className="relative ml-11 mr-4" style={{ height, minWidth: maxColumns > 1 ? maxColumns * 140 : undefined }}>
       <div ref={gridRef} data-timeline-grid aria-label="タイムライン（空き枠をタップして新規作成）" className="absolute inset-0"
         onClick={onGridClick}
         onPointerDownCapture={(event) => { downOnGrid.current = event.target === event.currentTarget }}
@@ -55,29 +56,34 @@ export function TimelineGrid({ gridRef, range, blocks, drag, trayDurationMin, no
           const layout = layouts.get(issue.id)!
           const done = doneIds.has(issue.statusId)
           const active = drag !== null && drag.kind !== 'tray' && drag.id === issue.id
-          const { color, icon } = taskAppearance(issue)
+          const { color } = taskAppearance(issue)
           const blockHeight = Math.max(16, durationMin * PX_PER_MIN - 4)
-          const compact = blockHeight < 36
+          const compact = blockHeight < 80
           const narrow = layout.columns > 1
-          const iconSize = Math.min(44, blockHeight)
+          const completion = <button type="button" data-no-drag disabled={!!issue.carryoverToId} aria-label={issue.carryoverToId ? `${issue.title} は持ち越し済み` : done ? `${issue.title} を未完了に戻す` : `${issue.title} を完了にする`} aria-pressed={done}
+            onClick={(event) => { event.stopPropagation(); onToggleDone(issue) }}
+            onKeyDown={(event) => event.stopPropagation()}
+            className="flex shrink-0 items-center justify-center"
+            style={{ width: compact ? 24 : 44, height: Math.min(44, blockHeight) }}>
+            <span className="flex size-[19px] items-center justify-center rounded-full border-[1.5px]" style={{ borderColor: color, color: done ? 'white' : color, background: done ? color : 'var(--surface)' }}>{done && <Icon name="check" className="size-3" />}</span>
+          </button>
           return (
             <div key={issue.id} role="button" tabIndex={0} data-block-id={issue.carryoverToId ? undefined : issue.id} data-no-drag={issue.carryoverToId ? true : undefined} aria-label={`${issue.title} ${formatMin(startMin)}から${durationMin}分${issue.carryoverToId ? ' 持ち越し済み' : ''}`}
+              title={`${issue.title} ${formatMin(startMin)}–${formatMin(startMin + durationMin)}`}
               onClick={() => { if (!shouldSuppressClick()) onOpen(issue) }}
               onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onOpen(issue) } }}
-              className={`timeline-block group absolute touch-pan-y select-none rounded-2xl text-left [-webkit-touch-callout:none] ${active ? 'z-20 bg-surface shadow-lg ring-1 ring-accent/40' : 'z-10'} ${done ? 'opacity-45' : ''}`}
-              style={{ '--task-color': color, top: minToY(startMin, range), height: blockHeight, left: `calc(${layout.column * 100 / layout.columns}% + 1px)`, width: `calc(${100 / layout.columns}% - 3px)`, transition: active ? 'none' : 'top 120ms ease-out, height 120ms ease-out' } as CSSProperties}>
-              <div aria-hidden className="pointer-events-none absolute inset-y-0 left-0 flex items-center justify-center rounded-full text-white" style={{ width: narrow ? Math.min(30, iconSize) : iconSize, background: color }}><Icon name={done ? 'check' : icon} className={compact ? 'size-3' : narrow ? 'size-4' : 'size-[22px]'} /></div>
-              <div className="pointer-events-none absolute inset-y-0 flex min-w-0 flex-col justify-center gap-0.5" style={{ left: narrow ? 38 : 58, right: narrow ? 27 : 42 }}>
-                {!compact && <p className="truncate text-[10px] tabular-nums leading-snug text-muted">{formatMin(startMin)}–{formatMin(startMin + durationMin)} <span className="ml-1">{durationMin} 分</span></p>}
-                <p className={`${compact ? 'text-[10px]' : 'text-[13px]'} truncate font-semibold leading-snug tracking-[-0.015em] ${done ? 'line-through' : ''}`}>{issue.recurrenceId && <span className="mr-1 text-muted">↻</span>}{issue.title}</p>
-                {!compact && (issue.carryoverToId || issue.carryoverFromId) && <p className="truncate text-[10px] text-muted">{issue.carryoverToId ? '翌日以降へ持ち越し済み' : '過去の予定から持ち越し'}</p>}
-              </div>
-              <button type="button" data-no-drag disabled={!!issue.carryoverToId} aria-label={issue.carryoverToId ? `${issue.title} は持ち越し済み` : done ? `${issue.title} を未完了に戻す` : `${issue.title} を完了にする`} aria-pressed={done}
-                onClick={(event) => { event.stopPropagation(); onToggleDone(issue) }}
-                onKeyDown={(event) => event.stopPropagation()}
-                className="absolute inset-y-0 right-0 flex items-center justify-center" style={{ width: narrow ? 27 : 40 }}>
-                <span className="flex size-[19px] items-center justify-center rounded-full border-[1.5px]" style={{ borderColor: color, color: done ? 'white' : color, background: done ? color : 'var(--surface)' }}>{done && <Icon name="check" className="size-3" />}</span>
-              </button>
+              className={`timeline-block group absolute ${narrow ? 'touch-auto' : 'touch-pan-y'} select-none rounded-2xl text-left [-webkit-touch-callout:none] ${active ? 'z-20 bg-surface shadow-lg ring-1 ring-accent/40' : 'z-10'} ${done ? 'opacity-45' : ''}`}
+              style={{ '--task-color': color, top: minToY(startMin, range), height: blockHeight, left: `calc(${layout.column * 100 / layout.columns}% + 1px)`, width: `calc(${100 / layout.columns}% - 3px)`, background: 'color-mix(in srgb, var(--task-color) 12%, var(--surface))', borderLeft: '3px solid var(--task-color)', transition: active ? 'none' : 'top 120ms ease-out, height 120ms ease-out' } as CSSProperties}>
+              {compact ? <div className="flex h-full min-w-0 items-center gap-1 px-1">
+                <p className={`min-w-0 flex-1 truncate text-[11px] font-semibold ${done ? 'line-through' : ''}`}>{issue.recurrenceId && '↻ '}{issue.title}</p>{completion}
+              </div> : <div className="sticky top-2 min-w-0 overflow-hidden px-2 py-1" style={{ maxHeight: blockHeight }}>
+                {/* 長時間の予定は中央寄せだと画面外になるため、スクロール中も上端で内容を読めるようにする。 */}
+                <div className="flex min-w-0 items-center gap-1">
+                  <p className="min-w-0 flex-1 text-[10px] tabular-nums leading-snug text-muted">{formatMin(startMin)}–<wbr />{formatMin(startMin + durationMin)}<span className="block">{durationMin} 分</span></p>{completion}
+                </div>
+                <p className={`overflow-hidden break-words text-[13px] font-semibold leading-snug ${done ? 'line-through' : ''}`} style={{ display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: blockHeight >= 160 ? 4 : blockHeight >= 110 ? 2 : 1 }}>{issue.recurrenceId && '↻ '}{issue.title}</p>
+                {(issue.carryoverToId || issue.carryoverFromId) && <p className="mt-1 truncate text-[10px] text-muted">{issue.carryoverToId ? '翌日以降へ持ち越し済み' : '過去の予定から持ち越し'}</p>}
+              </div>}
               {!issue.carryoverToId && <><div data-resize-top-id={issue.id} aria-hidden className="absolute left-0 top-0 flex h-2 touch-none items-start justify-center" style={{ width: narrow ? 30 : 44 }}><span className="resize-grip mt-0.5 h-0.5 w-4 rounded-full bg-white" /></div>
               <div data-resize-id={issue.id} aria-hidden className="absolute bottom-0 left-0 flex h-2 touch-none items-end justify-center" style={{ width: narrow ? 30 : 44 }}><span className="resize-grip mb-0.5 h-0.5 w-4 rounded-full bg-white" /></div></>}
             </div>
