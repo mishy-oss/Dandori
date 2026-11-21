@@ -45,6 +45,7 @@ export async function prepareAccountCache(): Promise<void> {
 const PAIR_KEY = 'dandori_google_pair'
 const PAIR_CALENDAR_KEY = 'dandori_google_pair_calendar'
 export async function resumeGoogleLogin(reload = true): Promise<boolean> {
+  if (useAccountStore.getState().busy) return false
   const secret = sessionStorage.getItem(PAIR_KEY)
   if (!secret) return false
   try {

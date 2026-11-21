@@ -63,3 +63,14 @@ it('clears both times when unplacing and preserves duration for the next placeme
   expect(scheduleInputError(cleared)).toBeNull()
   expect(updateScheduleInput(cleared, 'startTime', '09:00').endTime).toBe('16:45')
 })
+
+it('reports invalid duration causes instead of blaming a missing end time or day boundary', () => {
+  const initial = createScheduleInput('10:00', '30')
+  for (const [value, message] of [['', '所要時間を入力'], ['oops', '整数'], ['30.5', '整数'], ['Infinity', '整数'], ['0', '5分以上'], ['4', '5分以上'], ['1441', '1440分']] as const) {
+    const error = scheduleInputError(updateScheduleInput(initial, 'duration', value))
+    expect(error).toContain(message)
+    expect(error).not.toContain('終了時刻')
+  }
+  expect(scheduleInputError(createScheduleInput('', '0'))).toContain('5分以上')
+  expect(scheduleInputError(updateScheduleInput(initial, 'endTime', ''))).toBe('終了時刻を正しく入力してください')
+})

@@ -1,3 +1,4 @@
+import { inTransaction } from './transaction'
 import { differenceInCalendarDays, parseISO } from 'date-fns'
 import { db } from './db'
 import { addDaysStr, isValidDateStr, todayStr } from '../lib/date'
@@ -76,7 +77,7 @@ export async function createSprint(
   input: SprintInput = {},
   today: string = todayStr(),
 ): Promise<Sprint> {
-  return db.transaction('rw', db.projects, db.sprints, async () => {
+  return inTransaction(db, 'rw', [db.projects, db.sprints], async () => {
     if (!(await getProject(projectId))) throw new Error('プロジェクトが見つかりません')
     return insertSprint(projectId, input, today)
   })
@@ -86,7 +87,7 @@ export async function updateSprint(
   id: string,
   patch: Pick<SprintInput, 'name' | 'goal' | 'startDate' | 'endDate'>,
 ): Promise<Sprint> {
-  return db.transaction('rw', db.sprints, async () => {
+  return inTransaction(db, 'rw', [db.sprints], async () => {
     const current = await getSprint(id)
     if (!current) throw new Error('スプリントが見つかりません')
     if (current.state === 'closed') throw new Error('完了したスプリントは編集できません')
@@ -112,7 +113,7 @@ export async function updateSprint(
 
 // 計画中のスプリントのみ削除でき、中のIssueはバックログへ戻る
 export async function deleteSprint(id: string): Promise<void> {
-  await db.transaction('rw', db.sprints, db.issues, async () => {
+  await inTransaction(db, 'rw', [db.sprints, db.issues], async () => {
     const s = await getSprint(id)
     if (!s) return
     if (s.state !== 'planned') throw new Error('計画中のスプリントのみ削除できます')
@@ -127,7 +128,7 @@ export async function deleteSprint(id: string): Promise<void> {
 }
 
 export async function startSprint(id: string): Promise<Sprint> {
-  return db.transaction('rw', db.sprints, db.issues, async () => {
+  return inTransaction(db, 'rw', [db.sprints, db.issues], async () => {
     const s = await getSprint(id)
     if (!s) throw new Error('スプリントが見つかりません')
     if (s.state !== 'planned') throw new Error('計画中のスプリントのみ開始できます')
@@ -173,7 +174,7 @@ function withSnapshot(sprint: Sprint, snapshot: SprintSnapshot): Sprint {
 }
 
 export async function recordSprintSnapshot(id: string, date: string = todayStr()): Promise<Sprint | undefined> {
-  return db.transaction('rw', db.projects, db.workflows, db.sprints, db.issues, async () => {
+  return inTransaction(db, 'rw', [db.projects, db.workflows, db.sprints, db.issues], async () => {
     const sprint = await getSprint(id)
     if (!sprint || sprint.state !== 'active') return sprint
     const project = await getProject(sprint.projectId)
@@ -192,7 +193,7 @@ export async function completeSprint(
   incomplete: IncompleteIssuesAction,
   today: string = todayStr(),
 ): Promise<CompleteSprintResult> {
-  return db.transaction('rw', db.projects, db.workflows, db.sprints, db.issues, async () => {
+  return inTransaction(db, 'rw', [db.projects, db.workflows, db.sprints, db.issues], async () => {
     const s = await getSprint(id)
     if (!s) throw new Error('スプリントが見つかりません')
     if (s.state !== 'active') throw new Error('アクティブなスプリントのみ完了できます')
@@ -242,7 +243,7 @@ export async function completeSprint(
 
 // 完了済みスプリントへは移せない。null でバックログへ戻す
 export async function assignIssueToSprint(issueId: string, sprintId: string | null): Promise<Issue> {
-  return db.transaction('rw', db.projects, db.workflows, db.sprints, db.issues, db.recurrenceRules, async () => {
+  return inTransaction(db, 'rw', [db.projects, db.workflows, db.sprints, db.issues, db.recurrenceRules], async () => {
     const issue = await db.issues.get(issueId)
     if (!issue || issue.deletedAt !== null) throw new Error('Issueが見つかりません')
     if (sprintId !== null) {

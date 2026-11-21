@@ -42,7 +42,6 @@ interface DataState {
     scopeMonth?: string,
   ) => Promise<void>
   deleteIssue: (id: string) => Promise<void>
-  stopRecurrence: (id: string) => Promise<void>
   carryoverIssue: (id: string, input: CarryoverInput) => Promise<Issue>
 
 }
@@ -168,10 +167,6 @@ export const useDataStore = create<DataState>((set, get) => {
     },
     deleteIssue: async (id) => {
       await issueRepo.deleteIssue(id)
-      await reload()
-    },
-    stopRecurrence: async (id) => {
-      await issueRepo.stopRecurrence(id)
       await reload()
     },
     carryoverIssue: async (id, input) => {

@@ -1,3 +1,4 @@
+import { inTransaction } from './transaction'
 import { db } from './db'
 import { getIssue, normalizeRecurrence, syncParentStatuses, updateIssue, type IssuePatch } from './issueRepo'
 import { getProject, getWorkflow } from './projectRepo'
@@ -16,7 +17,7 @@ export async function editRecurringIssue(id: string, patch: IssuePatch, scope: R
   const hash = scope === 'future' && captured?.recurrenceId
     ? await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${captured.recurrenceId}:${id}`)) : null
   const ruleId = hash ? `recurrence-${[...new Uint8Array(hash)].map(byte => byte.toString(16).padStart(2, '0')).join('')}` : ''
-  return db.transaction('rw', [db.projects, db.workflows, db.issues, db.sprints, db.recurrenceRules], async () => {
+  return inTransaction(db, 'rw', [db.projects, db.workflows, db.issues, db.sprints, db.recurrenceRules], async () => {
     const current = await getIssue(id)
     if (!current) throw new Error('タスクが見つかりません')
     if (scope === 'future' && current.recurrenceId !== captured?.recurrenceId) throw new Error('繰り返し設定が変更されました。画面を開き直してください')

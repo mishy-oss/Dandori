@@ -12,7 +12,8 @@ export async function updateSettings(patch: Partial<Omit<Settings, 'id'>>): Prom
   if (!Number.isInteger(s) || s < 0 || s > 23) throw new Error('開始時刻は0〜23時で指定してください')
   if (!Number.isInteger(e) || e < 1 || e > 24) throw new Error('終了時刻は1〜24時で指定してください')
   if (e - s < 1) throw new Error('終了時刻は開始時刻より後にしてください')
-  if (!Number.isInteger(d) || d < 5 || d > 480) throw new Error('既定の所要時間は5〜480分で指定してください')
+  if (!Number.isInteger(d)) throw new Error('既定の所要時間は分単位の整数で指定してください')
+  if (d < 5 || d > 480) throw new Error('既定の所要時間は5〜480分で指定してください')
   if (next.weekStartsOn !== 0 && next.weekStartsOn !== 1) throw new Error('週の開始日が正しくありません')
   await db.settings.put(next)
   return next
