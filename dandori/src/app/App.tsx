@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { BacklogScreen } from '../features/backlog/BacklogScreen'
 import { BoardScreen } from '../features/board/BoardScreen'
 import { SettingsScreen } from '../features/settings/SettingsScreen'
 import { useDataStore } from '../store/data'
@@ -15,7 +14,6 @@ import { readPushDeviceToken, syncPushSchedules, PUSH_SETTINGS_CHANGED_EVENT } f
 const TABS = [
   { id: 'today', label: '予定', icon: 'timeline', Screen: TimelineScreen },
   { id: 'board', label: 'ボード', icon: 'board', Screen: BoardScreen },
-  { id: 'backlog', label: 'タスク', icon: 'inbox', Screen: BacklogScreen },
   { id: 'settings', label: '設定', icon: 'settings', Screen: SettingsScreen },
 ] as const
 
@@ -87,7 +85,7 @@ export function App() {
 
       <nav
         aria-label="メイン"
-        className="app-nav grid grid-cols-4 px-1"
+        className="app-nav grid grid-cols-3 px-1"
       >
         {TABS.map((t) => (
           <button

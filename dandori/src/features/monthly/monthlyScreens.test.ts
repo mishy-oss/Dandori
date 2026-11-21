@@ -39,7 +39,7 @@ it('shows monthly planning without any sprint controls', () => {
 it('uses Japanese headings while preserving English option values', () => {
   vi.stubGlobal('window', { matchMedia: () => ({ matches: false }) })
   try {
-    for (const [Screen, title] of [[BoardScreen, 'ボード'], [BacklogScreen, 'タスク'], [SettingsScreen, '設定']] as const) {
+    for (const [Screen, title] of [[BoardScreen, 'ボード'], [BacklogScreen, 'ボード'], [SettingsScreen, '設定']] as const) {
       const html = renderToStaticMarkup(createElement(Screen))
       expect(html).toContain(`>${title}</h1>`)
       expect(html).toMatch(/[\u3040-\u30ff\u4e00-\u9fff]/)
@@ -145,7 +145,7 @@ it('shows parent links, child progress and related editing controls', () => {
   expect(detached).not.toContain('親を外す</button>')
 })
 
-it('uses the same recurring cards in the task tab and board', () => {
+it('keeps recurring progress and month controls in the unified board and legacy entry', () => {
   useDataStore.setState({ issues: [
     recurringTask('a', { statusId: 'done' }),
     recurringTask('b', { number: 2, date: '2027-01-02' }),
@@ -163,7 +163,13 @@ it('uses the same recurring cards in the task tab and board', () => {
     expect(html).not.toContain('翌月だけのタスク')
   }
   const tasks = renderToStaticMarkup(createElement(BacklogScreen))
-  expect(tasks).toContain('3件表示 / 4タスク')
+  expect(tasks).toContain('To Do：3件表示 / 全ステータス：3件')
+  expect(tasks).toContain('繰り返し各回を含む4タスク')
+  expect(tasks).toContain('aria-label="通常タスクの対象月を変更"')
+  expect(tasks).toContain('日課の対象月を変更')
+  expect(tasks.match(/aria-label="月次バーンダウン"/g)).toHaveLength(1)
+  expect(tasks).toContain('親タスク・epic・持ち越し済みの履歴を除いて数えます')
+  for (const label of ['タスクを検索', '優先度で絞り込み', '種別で絞り込み', 'すべての月のタスクを表示']) expect(tasks).toContain(label)
 })
 
 it('shows one current carryover with an expandable history in board and task views', () => {

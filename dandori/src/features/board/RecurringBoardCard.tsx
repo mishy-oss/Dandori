@@ -7,6 +7,7 @@ import { formatIssueNumber } from '../../lib/issueNumber'
 import { formatMin } from '../timeline/timelineLogic'
 import type { BoardIssueGroup } from './recurringGroups'
 import { TaskRelations } from './TaskRelations'
+import { CarryoverTrail } from './CarryoverTrail'
 
 interface Props {
   group: BoardIssueGroup
@@ -18,6 +19,7 @@ interface Props {
   onOpen: (issue: Issue) => void
   onToggleDone: (id: string) => Promise<void>
   onChangeStatus: (id: string, statusId: string) => Promise<void>
+  onMove?: (issue: Issue) => void
 }
 
 function occurrenceLabel(issue: Issue): string {
@@ -32,7 +34,7 @@ function frequencyLabel(rule?: RecurrenceRule): string {
   return rule.active ? label : `${label} · 停止済み`
 }
 
-export function RecurringBoardCard({ group, relatedIssues = [], rule, statuses, doneIds, pulse, onOpen, onToggleDone, onChangeStatus }: Props) {
+export function RecurringBoardCard({ group, relatedIssues = [], rule, statuses, doneIds, pulse, onOpen, onToggleDone, onChangeStatus, onMove }: Props) {
   const [expanded, setExpanded] = useState(false)
   const [busy, setBusy] = useState(false)
   const detailsId = useId()
@@ -75,7 +77,7 @@ export function RecurringBoardCard({ group, relatedIssues = [], rule, statuses, 
         <ul className="divide-y divide-border px-2">
           {group.occurrences.map((issue) => {
             const done = doneIds.has(issue.statusId)
-            return <li key={issue.id} className="flex items-center gap-1 py-2">
+            return <li key={issue.id} className="grid grid-cols-[2.75rem_minmax(0,1fr)] items-center gap-1 py-2">
               <button type="button" disabled={busy} aria-label={`${occurrenceLabel(issue)} — ${issue.title} — ${done ? '未完了に戻す' : '完了にする'}`} aria-pressed={done}
                 className="flex size-11 shrink-0 items-center justify-center rounded-full disabled:opacity-40"
                 onClick={() => void run(() => onToggleDone(issue.id))}>
@@ -86,11 +88,17 @@ export function RecurringBoardCard({ group, relatedIssues = [], rule, statuses, 
                 <span className="block truncate text-[10px] text-muted">{formatIssueNumber(issue.number)}{issue.title !== group.issue.title && ` · ${issue.title}`}</span>
                 <TaskRelations issue={issue} issues={relatedIssues} doneIds={doneIds} />
               </button>
+              <div className="col-start-2 flex min-w-0 flex-wrap items-center gap-2">
               <select aria-label={`${occurrenceLabel(issue)} のステータス`} value={issue.statusId} disabled={busy}
-                className="min-h-11 max-w-[40%] rounded-lg border border-border bg-surface-2 px-2 text-[11px] disabled:opacity-40"
+                className="min-h-11 min-w-0 max-w-full flex-1 rounded-lg border border-border bg-surface-2 px-2 text-[11px] disabled:opacity-40"
                 onChange={(event) => { const statusId = event.target.value; void run(() => onChangeStatus(issue.id, statusId)) }}>
                 {statuses.map((status) => <option key={status.id} value={status.id}>{status.name}</option>)}
               </select>
+              {onMove && <button type="button" disabled={busy} aria-label={`${occurrenceLabel(issue)} — ${issue.title}の対象月を変更`}
+                className="min-h-11 shrink-0 rounded-lg border border-border px-3 text-[11px] text-muted disabled:opacity-40"
+                onClick={() => onMove(issue)}>対象月</button>}
+              </div>
+              <div className="col-start-2 min-w-0"><CarryoverTrail issue={issue} issues={relatedIssues} onOpen={onOpen} /></div>
             </li>
           })}
         </ul>
