@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 import { DoneCheckButton } from '../../app/DoneCheckButton'
-import type { Issue, Priority } from '../../db/types'
+import { PRIORITY_LABELS, type Issue, type Priority } from '../../db/types'
 import { formatIssueNumber } from '../../lib/issueNumber'
 import { TaskRelations } from './TaskRelations'
 
@@ -23,6 +23,7 @@ interface Props {
   nextLabel?: string
   onOpen: () => void
   onToggleDone: () => void
+  onMove?: () => void
   relatedIssues?: Issue[]
   doneIds?: Set<string>
 }
@@ -38,6 +39,7 @@ export function BoardCard({
   nextLabel,
   onOpen,
   onToggleDone,
+  onMove,
   relatedIssues = [],
   doneIds = new Set(),
 }: Props) {
@@ -67,13 +69,17 @@ export function BoardCard({
       <DoneCheckButton done={done} onToggle={onToggleDone} />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="text-xs text-muted">
-          {formatIssueNumber(issue.number)} · {issue.type}
+          {formatIssueNumber(issue.number)} · {issue.type} · {PRIORITY_LABELS[issue.priority]}
           {issue.recurrenceId ? ' · ↻' : ''}
+          {issue.estimateMin ? ` · ${issue.estimateMin} 分` : ''}
           {issue.dueDate ? ` · 期限 ${issue.dueDate}` : ''}
         </span>
         <span className={done ? 'line-through opacity-60' : ''}>{issue.title}</span>
         <TaskRelations issue={issue} issues={relatedIssues} doneIds={doneIds} />
       </div>
+      {onMove && <button type="button" data-no-drag aria-label={`${issue.title}の対象月を変更`}
+        className="min-h-11 shrink-0 rounded-lg border border-border px-2 text-[11px] text-muted"
+        onClick={(event) => { event.stopPropagation(); onMove() }}>対象月</button>}
     </div>
   )
 
