@@ -31,6 +31,7 @@ interface Options {
   listRef: RefObject<HTMLUListElement | null>
   activeIndex: number
   columnCount: number
+  allowReorder?: boolean
   onSwitchColumn: (index: number) => void
   onSwipeMove: (issueId: string, targetColumnIndex: number) => void
   onDrop: (issueId: string, columnIndex: number, dropIndex: number) => void
@@ -261,7 +262,7 @@ export function useBoardGestures(options: Options) {
       window.addEventListener('pointermove', onMove)
       window.addEventListener('pointerup', onUp)
       window.addEventListener('pointercancel', onCancel)
-      s.timer = window.setTimeout(startDrag, LONG_PRESS_MS)
+      if (optionsRef.current.allowReorder !== false) s.timer = window.setTimeout(startDrag, LONG_PRESS_MS)
     },
     [measureDropIndex],
   )

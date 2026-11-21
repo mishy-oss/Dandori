@@ -33,10 +33,10 @@ export function groupBoardIssues(issues: Issue[], doneIds: Set<string>): BoardIs
 }
 
 /* 1枚のカードに複数回が隠れるため、表示上の挿入位置をそのまま保存には使えない。 */
-export function groupedDropIndex(issues: Issue[], doneIds: Set<string>, movingId: string, statusId: string, index: number): number {
+export function groupedDropIndex(issues: Issue[], doneIds: Set<string>, movingId: string, statusId: string, index: number, visibleKeys?: Set<string>): number {
   const remaining = issues.filter((issue) => issue.id !== movingId && issue.deletedAt === null && !issue.carryoverToId)
   const column = remaining.filter((issue) => issue.statusId === statusId).sort(compareRank)
-  const visible = groupBoardIssues(remaining, doneIds).filter((group) => group.issue.statusId === statusId)
+  const visible = groupBoardIssues(remaining, doneIds).filter((group) => group.issue.statusId === statusId && (!visibleKeys || visibleKeys.has(group.key)))
   const anchor = visible[Math.max(0, index)]
   if (!anchor) return column.length
   return column.findIndex((issue) => issue.id === anchor.issue.id)

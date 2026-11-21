@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { Issue } from '../../db/types'
+import { ISSUE_TYPES, PRIORITIES, PRIORITY_LABELS, type Issue, type IssueType, type Priority } from '../../db/types'
+import { FIELD_CLASS } from '../../app/fields'
 import { columnIssues } from '../../lib/issueOrder'
 import { selectCurrentProject, useDataStore } from '../../store/data'
 import { issueMonth } from '../../lib/month'
@@ -9,10 +10,13 @@ import { IssueEditor } from '../issue-editor/IssueEditor'
 import { BoardCard } from './BoardCard'
 import { wipStatus } from './boardLogic'
 import { useBoardGestures } from './useBoardGestures'
-import { groupBoardIssues, groupedDropIndex, type BoardIssueGroup } from './recurringGroups'
+import { groupedDropIndex, type BoardIssueGroup } from './recurringGroups'
 import { RecurringBoardCard } from './RecurringBoardCard'
 import { CarryoverTrail } from './CarryoverTrail'
 import { currentWork } from '../../lib/carryover'
+import { EMPTY_FILTER, isFilterActive, type IssueFilter } from '../backlog/filters'
+import { MoveSheet } from '../backlog/MoveSheet'
+import { selectBoardGroups, statusMoveScope } from './boardView'
 
 export function BoardScreen() {
   const project = useDataStore(selectCurrentProject)
@@ -23,10 +27,13 @@ export function BoardScreen() {
   const ready = useDataStore((s) => s.ready)
   const moveIssue = useDataStore((s) => s.moveIssue)
   const toggleIssueDone = useDataStore((s) => s.toggleIssueDone)
+  const [filter, setFilter] = useState<IssueFilter>(EMPTY_FILTER)
+  const [allMonths, setAllMonths] = useState(false)
+  const [moving, setMoving] = useState<Issue | null>(null)
 
   const issues = useMemo(
-    () => currentWork(allIssues).filter((issue) => issueMonth(issue) === month),
-    [allIssues, month],
+    () => currentWork(allIssues).filter((issue) => allMonths || issueMonth(issue) === month),
+    [allIssues, month, allMonths],
   )
   const [columnIndex, setColumnIndex] = useState(0)
   const [editing, setEditing] = useState<Issue | 'new' | null>(null)
@@ -39,7 +46,8 @@ export function BoardScreen() {
     () => new Set(statuses.filter((s) => s.category === 'done').map((s) => s.id)),
     [statuses],
   )
-  const groups = useMemo(() => groupBoardIssues(issues, doneIds), [issues, doneIds])
+  const groups = useMemo(() => selectBoardGroups(allIssues, doneIds, month, allMonths, filter), [allIssues, doneIds, month, allMonths, filter])
+  const taskCount = groups.reduce((total, group) => total + group.occurrences.length, 0)
   const activeIndex = Math.min(columnIndex, Math.max(statuses.length - 1, 0))
   const active = statuses[activeIndex]
 
@@ -60,34 +68,39 @@ export function BoardScreen() {
     }
   }
 
-  async function move(issueId: string, statusIdx: number, index: number) {
+  async function move(issueId: string, statusIdx: number, index: number, scopeMonth = month) {
     const status = statuses[statusIdx]
     if (!status) return
     setPulseId(issueId)
     try {
       setError(null)
-      await moveIssue(issueId, status.id, index, month)
+      await moveIssue(issueId, status.id, index, scopeMonth)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
+  }
+
+  async function changeStatus(id: string, statusId: string) {
+    const scope = statusMoveScope(useDataStore.getState().issues, id, statusId)
+    if (scope) await move(id, statuses.findIndex(status => status.id === statusId), scope.index, scope.month)
   }
 
   const { drag, dropIndex, swipe, onPointerDown, shouldSuppressClick } = useBoardGestures({
     listRef,
     activeIndex,
     columnCount: statuses.length,
+    allowReorder: !allMonths,
     onSwitchColumn: setColumnIndex,
     onSwipeMove: (id, target) => {
-      // 実行時点の最新の並びの末尾へ入れる(アニメーション待ちの間に状態が変わりうるため)
-      const latest = useDataStore.getState().issues.filter((issue) => issueMonth(issue) === month)
-      void move(id, target, columnIssues(latest, statuses[target].id).length)
+      void changeStatus(id, statuses[target].id)
     },
     /* 非表示の繰り返し回も順位を持つため、カード数と保存先の位置は一致しない。 */
     onDrop: (id, col, index) => {
       const status = statuses[col]
       if (!status) return
-      const latest = useDataStore.getState().issues.filter((issue) => issueMonth(issue) === month)
-      void move(id, col, groupedDropIndex(latest, doneIds, id, status.id, index))
+      const latest = currentWork(useDataStore.getState().issues).filter((issue) => issueMonth(issue) === month)
+      const visibleKeys = new Set(selectBoardGroups(latest, doneIds, month, false, filter).map(group => group.key))
+      void move(id, col, groupedDropIndex(latest, doneIds, id, status.id, index, visibleKeys))
     },
   })
 
@@ -130,7 +143,24 @@ export function BoardScreen() {
       <details className="rounded-2xl border border-border bg-surface">
         <summary className="cursor-pointer p-3 text-xs font-medium">月次バーンダウンを見る</summary>
         <MonthlyBurndown />
+        <p className="px-4 pb-4 text-[11px] text-muted">対象月の集計です。検索・絞り込み・全月表示は反映しません。親タスク・epic・持ち越し済みの履歴を除いて数えます。</p>
       </details>
+
+      <div role="search" className="flex min-w-0 flex-col gap-2">
+        <input type="search" aria-label="タスクを検索" placeholder="タイトル・番号・ラベルで検索" className={FIELD_CLASS} value={filter.query} onChange={(event) => setFilter({ ...filter, query: event.target.value })} />
+        <div className="grid min-w-0 grid-cols-2 gap-2">
+          <select aria-label="優先度で絞り込み" className={`${FIELD_CLASS} min-w-0`} value={filter.priority} onChange={(event) => setFilter({ ...filter, priority: event.target.value as Priority | 'all' })}>
+            <option value="all">優先度: すべて</option>{PRIORITIES.map(priority => <option key={priority} value={priority}>{PRIORITY_LABELS[priority]}</option>)}
+          </select>
+          <select aria-label="種別で絞り込み" className={`${FIELD_CLASS} min-w-0`} value={filter.type} onChange={(event) => setFilter({ ...filter, type: event.target.value as IssueType | 'all' })}>
+            <option value="all">種別: すべて</option>{ISSUE_TYPES.map(type => <option key={type}>{type}</option>)}
+          </select>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-x-2">
+          <label className="flex min-h-11 items-center gap-2 text-xs text-muted"><input type="checkbox" checked={allMonths} onChange={(event) => setAllMonths(event.target.checked)} />すべての月のタスクを表示</label>
+          <button type="button" className="min-h-11 rounded-lg border border-border px-3 text-xs disabled:opacity-40" disabled={!isFilterActive(filter)} onClick={() => setFilter(EMPTY_FILTER)}>クリア</button>
+        </div>
+      </div>
 
       <div role="tablist" aria-label="ステータス" className="-mx-4 flex gap-2 overflow-x-auto px-4">
         {statuses.map((s, i) => {
@@ -159,6 +189,13 @@ export function BoardScreen() {
         })}
       </div>
 
+      <div role="status" className="text-xs text-muted">
+        <p>{active.name}：{column.length}件表示 / 全ステータス：{groups.length}件</p>
+        <p>繰り返し各回を含む{taskCount}タスク · {allMonths ? 'すべての月' : month}{isFilterActive(filter) ? ' · 絞り込み中' : ''}</p>
+      </div>
+      <p className="text-[11px] text-muted">各列の件数はカード数です。繰り返しは月ごとに1枚へまとめ、次の未完了のステータスに表示します。</p>
+      {allMonths && <p className="text-[11px] text-muted">全月表示でも横スワイプでステータスを変更できます。並べ替えは対象月表示で行えます。</p>}
+
       {wip.over && (
         <p role="status" className="rounded-lg border border-amber-500 bg-amber-500/10 p-3 text-sm">
           ⚠ WIP上限({active.wipLimit}件)を超えています(実タスク{actualCount} tasks). You can still add tasks.
@@ -179,7 +216,7 @@ export function BoardScreen() {
       >
         {rows.length === 0 && (
           <li className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted">
-            この列にIssueはありません
+            {isFilterActive(filter) ? 'この列に検索条件に合うタスクはありません。ほかのステータスも確認できます。' : 'この列にタスクはありません。右下の＋から作成できます。'}
           </li>
         )}
         {rows.map((row) => {
@@ -197,6 +234,7 @@ export function BoardScreen() {
           const issue = group.issue
           if (group.recurring) {
             return <li key={group.key}>
+              {allMonths && <span className="mb-1 block text-[11px] text-muted">対象月：{issueMonth(issue)}</span>}
               <RecurringBoardCard
                 group={group}
                 relatedIssues={allIssues}
@@ -206,11 +244,8 @@ export function BoardScreen() {
                 pulse={group.occurrences.some((occurrence) => occurrence.id === pulseId)}
                 onOpen={setEditing}
                 onToggleDone={toggleDone}
-                onChangeStatus={async (id, statusId) => {
-                  const statusIndex = statuses.findIndex((status) => status.id === statusId)
-                  const latest = useDataStore.getState().issues.filter((issue) => issueMonth(issue) === month)
-                  await move(id, statusIndex, columnIssues(latest, statusId).length)
-                }}
+                onChangeStatus={changeStatus}
+                onMove={setMoving}
               />
             </li>
           }
@@ -218,6 +253,7 @@ export function BoardScreen() {
           const swipeHere = swipe?.issueId === issue.id ? swipe : null
           return (
             <li key={group.key}>
+              {allMonths && <span className="mb-1 block text-[11px] text-muted">対象月：{issueMonth(issue)}</span>}
               <BoardCard
                 issue={issue}
                 relatedIssues={allIssues}
@@ -242,6 +278,7 @@ export function BoardScreen() {
                   if (!shouldSuppressClick()) setEditing(issue)
                 }}
                 onToggleDone={() => void toggleDone(issue.id)}
+                onMove={() => setMoving(issue)}
               />
               <CarryoverTrail issue={issue} issues={allIssues} onOpen={setEditing} />
             </li>
@@ -287,6 +324,7 @@ export function BoardScreen() {
           onClose={() => setEditing(null)}
         />
       )}
+      {moving && <MoveSheet key={moving.id} issue={moving} onClose={() => setMoving(null)} />}
     </section>
   )
 }
