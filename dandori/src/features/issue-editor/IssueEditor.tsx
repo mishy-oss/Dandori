@@ -1,4 +1,4 @@
-import { useId, useMemo, useState, type FormEvent } from 'react'
+import { useId, useMemo, useRef, useState, type FormEvent } from 'react'
 import { ISSUE_TYPES, PRIORITIES, PRIORITY_LABELS, type Issue, type IssueType, type Priority, type RecurrenceFrequency } from '../../db/types'
 import { formatIssueNumber } from '../../lib/issueNumber'
 import { todayStr } from '../../lib/date'
@@ -11,6 +11,7 @@ import { CarryoverDialog } from './CarryoverDialog'
 import { currentWork } from '../../lib/carryover'
 import { createScheduleInput, scheduleInputError, updateScheduleInput } from './scheduleInput'
 import type { RecurringEditScope } from '../../db/recurringEditRepo'
+import { existingIssueLabels, labelKey, normalizeIssueLabels, normalizeLabel, suggestIssueLabels } from '../../lib/labels'
 
 const FIELD =
   'min-h-11 w-full rounded-lg border border-border bg-surface-2 px-3 text-base'
@@ -54,6 +55,11 @@ export function IssueEditor({
   const [description, setDescription] = useState(issue?.description ?? '')
   const [labels, setLabels] = useState<string[]>(issue?.labels ?? [])
   const [labelDraft, setLabelDraft] = useState('')
+  const labelInputRef = useRef<HTMLInputElement>(null)
+  const labelHelpId = useId()
+  const knownLabels = useMemo(() => existingIssueLabels(issues, project?.id ?? ''), [issues, project?.id])
+  const selectedLabels = normalizeIssueLabels(labels, knownLabels)
+  const labelSuggestions = suggestIssueLabels(knownLabels, selectedLabels, labelDraft)
   const [showDelete, setShowDelete] = useState(false)
   const [showCarryover, setShowCarryover] = useState(false)
   const [type, setType] = useState<IssueType>(issue?.type ?? 'task')
@@ -159,6 +165,12 @@ export function IssueEditor({
     }
   }
 
+  function addLabel(value: string) {
+    setLabels(appendIssueLabel(selectedLabels, value, knownLabels))
+    setLabelDraft('')
+    labelInputRef.current?.focus()
+  }
+
   function onSubmit(e: FormEvent) {
     e.preventDefault()
     if (detachingId) return
@@ -177,7 +189,7 @@ export function IssueEditor({
     }
     const scheduleChanged = !issue || issue.date !== (date || null) || issue.startMin !== startMin
     const common = {
-      labels: appendIssueLabel(labels, labelDraft),
+      labels: appendIssueLabel(selectedLabels, labelDraft, knownLabels),
       title,
       description: description || undefined,
       type,
@@ -277,24 +289,32 @@ export function IssueEditor({
         <fieldset className="flex flex-col gap-2 rounded-lg border border-border p-3">
           <legend className="px-1 text-sm font-semibold text-muted">ラベル</legend>
           <div className="flex gap-2">
-            <input aria-label="追加するラベル" className={`${FIELD} min-w-0 flex-1`} value={labelDraft} placeholder="仕事・買い物など"
+            <input ref={labelInputRef} aria-label="追加するラベル" aria-describedby={labelHelpId} autoComplete="off" className={`${FIELD} min-w-0 flex-1`} value={labelDraft} placeholder="既存のラベルを選択、または新しく入力"
               onChange={(event) => setLabelDraft(event.target.value)}
               onKeyDown={(event) => {
                 // IMEの変換確定をラベル追加として扱わない。
-                if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
+                if (event.key === 'Enter' && !event.nativeEvent.isComposing && event.nativeEvent.keyCode !== 229) {
                   event.preventDefault()
-                  setLabels(appendIssueLabel(labels, labelDraft))
-                  setLabelDraft('')
+                  addLabel(labelDraft)
                 }
               }} />
-            <button type="button" disabled={!labelDraft.trim()} className="min-h-11 rounded-lg border border-border px-3 text-sm disabled:opacity-40"
-              onClick={() => { setLabels(appendIssueLabel(labels, labelDraft)); setLabelDraft('') }}>追加</button>
+            <button type="button" disabled={!normalizeLabel(labelDraft)} className="min-h-11 rounded-lg border border-border px-3 text-sm disabled:opacity-40"
+              onClick={() => addLabel(labelDraft)}>追加</button>
           </div>
-          {labels.length > 0 && <ul className="flex flex-wrap gap-2">
-            {labels.map((label, index) => <li key={`${index}-${label}`} className="flex max-w-full items-center gap-1 rounded-lg bg-surface-2 pl-3 text-sm">
+          <p id={labelHelpId} className="text-[11px] text-muted">候補を押すと追加できます。前後・連続する空白、全角・半角、英字の大小文字の違いは同じラベルとして扱います。</p>
+          {labelSuggestions.length > 0 ? <div>
+            <p className="mb-1 text-xs text-muted">既存のラベルから選択</p>
+            <ul aria-label="ラベルの候補" className="flex max-h-36 flex-wrap gap-2 overflow-y-auto">
+              {labelSuggestions.map(label => <li key={labelKey(label)} className="max-w-full">
+                <button type="button" aria-label={`${label}のラベルを追加`} className="min-h-11 max-w-full break-words rounded-lg border border-border px-3 text-left text-sm text-accent" onClick={() => addLabel(label)}>{label}</button>
+              </li>)}
+            </ul>
+          </div> : labelDraft && <p role="status" className="text-xs text-muted">{selectedLabels.some(label => labelKey(label) === labelKey(labelDraft)) ? 'このラベルは追加済みです。' : '一致する候補がありません。「追加」で新しいラベルを作成できます。'}</p>}
+          {selectedLabels.length > 0 && <ul aria-label="追加済みのラベル" className="flex flex-wrap gap-2">
+            {selectedLabels.map((label) => <li key={labelKey(label)} className="flex max-w-full items-center gap-1 rounded-lg bg-surface-2 pl-3 text-sm">
               <span className="break-words">{label}</span>
               <button type="button" aria-label={`${label}のラベルを削除`} className="min-h-11 min-w-11 shrink-0"
-                onClick={() => setLabels(labels.filter((_, labelIndex) => labelIndex !== index))}>×</button>
+                onClick={() => setLabels(selectedLabels.filter(selected => labelKey(selected) !== labelKey(label)))}>×</button>
             </li>)}
           </ul>}
         </fieldset>

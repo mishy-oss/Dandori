@@ -27,4 +27,11 @@ describe('matchesFilter', () => {
     expect(matchesFilter(issue({}), { query: 'ログイン', priority: 'all', type: 'bug' })).toBe(false)
     expect(isFilterActive({ ...EMPTY_FILTER, type: 'bug' })).toBe(true)
   })
+
+  it('matches legacy and normalized label spellings without changing priority and type filters', () => {
+    const legacy = issue({ labels: ['  ＡＰＩ　 連携 ', 'ｶﾚﾝﾀﾞｰ'], priority: 'high', type: 'bug' })
+    expect(matchesFilter(legacy, { query: 'api  連携', priority: 'high', type: 'bug' })).toBe(true)
+    expect(matchesFilter(legacy, { query: 'カレンダー', priority: 'all', type: 'all' })).toBe(true)
+    expect(matchesFilter(legacy, { query: 'api  連携', priority: 'low', type: 'bug' })).toBe(false)
+  })
 })

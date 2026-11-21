@@ -8,6 +8,7 @@ import { getProject, getWorkflow } from './projectRepo'
 import { getSprint } from './sprintRepo'
 import { expandRecurrenceInSprint, expandRecurrenceInMonth } from './recurrenceRepo'
 import { isValidMonth, issueMonth, currentMonth } from '../lib/month'
+import { existingIssueLabels, normalizeIssueLabels } from '../lib/labels'
 import type { Issue, IssueType, Priority, RecurrenceFrequency, RecurrenceRule } from './types'
 
 export interface RecurrenceInput {
@@ -211,7 +212,7 @@ export async function createIssue(input: CreateIssueInput): Promise<Issue> {
       isRoutine: status.category === 'routine',
       priority: input.priority ?? 'medium',
       parentId: input.parentId ?? null,
-      labels: input.labels ?? [],
+      labels: normalizeIssueLabels(input.labels ?? [], existingIssueLabels(await db.issues.where('projectId').equals(project.id).toArray(), project.id)),
       dueDate: input.dueDate ?? null,
       estimateMin: input.estimateMin ?? null,
       sprintId: input.sprintId ?? null,
@@ -273,6 +274,9 @@ export async function updateIssue(
       ...issuePatch,
       ...(title !== undefined && { title }),
       updatedAt: t,
+    }
+    if (issuePatch.labels !== undefined) {
+      next.labels = normalizeIssueLabels(issuePatch.labels, existingIssueLabels(await db.issues.where('projectId').equals(current.projectId).toArray(), current.projectId))
     }
     if (issuePatch.date && issuePatch.planningMonth === undefined && current.planningMonth) next.planningMonth = issuePatch.date.slice(0, 7)
     if (next.startMin !== null || next.date === null) {
