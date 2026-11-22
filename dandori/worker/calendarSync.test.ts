@@ -96,6 +96,34 @@ it('soft deletes a task when its Google event is cancelled', async () => {
   expect(result.data.issues[0].deletedAt).toBe(now)
 })
 
+it('treats a new same-title task as independent of a cancelled Google event', async () => {
+  const first = await synchronizeCalendar(initialSyncData(1), calendar(), google([event()]), now)
+  const removedId = first.data.issues[0].id
+  const newTask = fixtureIssue({ id: 'new-task', number: 2, title: '会議', durationMin: 60 })
+  first.data.issues.push(newTask)
+  first.data.projects[0].nextNumber = 3
+  const request = google([event({ status: 'cancelled' })])
+  const second = await synchronizeCalendar(first.data, first.calendar, request, now)
+  expect(second.data.issues.find(issue => issue.id === removedId)?.deletedAt).toBe(now)
+  expect(second.data.issues.find(issue => issue.id === newTask.id)?.deletedAt).toBeNull()
+  expect(second.calendar.links[newTask.id].eventId).not.toBe('event-1')
+  expect(request.mock.calls.flatMap(([, init]) => init?.method ? [init.method] : [])).toEqual(['POST'])
+})
+
+it('updates write protection when guests are added and keeps the subsequent local edit out of Google', async () => {
+  const first = await synchronizeCalendar(initialSyncData(1), calendar(), google([event()]), now)
+  const invited = event({ etag: 'invited', attendees: [{ email: 'guest@example.com' }] })
+  const second = await synchronizeCalendar(first.data, first.calendar, google([invited]), now)
+  const [issue] = second.data.issues
+  expect(issue.calendarReadOnly).toBe(true)
+  expect(second.calendar.links[issue.id]).toMatchObject({ readOnly: true, etag: 'invited' })
+  issue.title = '端末内だけの追記'
+  const request = google([invited])
+  const third = await synchronizeCalendar(second.data, second.calendar, request, now)
+  expect(third.data.issues[0].title).toBe('端末内だけの追記')
+  expect(request.mock.calls.every(([, init]) => !init?.method)).toBe(true)
+})
+
 it('freezes the old placement across Google edits and cancellations and exports only a separate new event', async () => {
   const first = await synchronizeCalendar(initialSyncData(1), calendar(), google([event()]), now)
   const previous = first.data.issues[0]
@@ -149,6 +177,20 @@ it('groups imported recurring instances without generating a second recurrence r
   expect(() => rankAfter(first.data.issues.at(-1)!.rank)).not.toThrow()
   const second = await synchronizeCalendar(first.data, first.calendar, google([event({ id: 'series', status: 'cancelled' })]), now)
   expect(second.data.issues.every(issue => issue.deletedAt === now)).toBe(true)
+})
+it('moves and cancels one recurring instance by ID while leaving its sibling intact', async () => {
+  const firstEvent = event({ recurringEventId: 'series' })
+  const sibling = event({ id: 'event-2', recurringEventId: 'series', start: { dateTime: '2026-11-24T00:00:00Z' }, end: { dateTime: '2026-11-24T01:00:00Z' } })
+  const first = await synchronizeCalendar(initialSyncData(1), calendar(), google([firstEvent, sibling]), now)
+  const [original, untouched] = first.data.issues
+  const movedEvent = { ...firstEvent, etag: 'moved', start: { dateTime: '2026-11-18T02:00:00Z' }, end: { dateTime: '2026-11-18T03:00:00Z' } }
+  const second = await synchronizeCalendar(first.data, first.calendar, google([movedEvent]), now)
+  expect(second.data.issues).toHaveLength(2)
+  expect(second.data.issues.find(issue => issue.id === original.id)).toMatchObject({ date: '2026-11-18', startMin: 660, deletedAt: null })
+  expect(second.data.issues.find(issue => issue.id === untouched.id)).toEqual(untouched)
+  const third = await synchronizeCalendar(second.data, second.calendar, google([{ ...movedEvent, status: 'cancelled' }]), now)
+  expect(third.data.issues.find(issue => issue.id === original.id)?.deletedAt).toBe(now)
+  expect(third.data.issues.find(issue => issue.id === untouched.id)).toEqual(untouched)
 })
 it('recovers an interrupted unplacement delete without deleting the unscheduled task', async () => {
   const first = await synchronizeCalendar(initialSyncData(1), calendar(), google([event()]), now)

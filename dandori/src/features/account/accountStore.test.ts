@@ -1,14 +1,14 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { db } from '../../db/db'
-import { initializeAccountDatabase, readSyncData } from './accountRepo'
+import { beginAccountRestore, finishAccountRestore, initializeAccountDatabase, readSyncData } from './accountRepo'
 import { syncAccount, syncCalendar, useAccountStore } from './accountStore'
-import { initialSyncData, type SyncDocument } from './syncModel'
+import { initialSyncData, isSyncData, type SyncDocument } from './syncModel'
 import { fixtureIssue } from './syncFixtures'
 
 beforeEach(async () => {
   await Promise.all(db.tables.map(table => table.clear()))
   await initializeAccountDatabase()
-  useAccountStore.setState({ user: { id: 'alice', email: 'alice@example.com', name: 'Alice' }, authenticated: true, busy: false, error: null, calendarError: null, conflicts: [], message: null, calendar: null })
+  useAccountStore.setState({ user: { id: 'alice', email: 'alice@example.com', name: 'Alice' }, authenticated: true, busy: false, error: null, calendarError: null, conflicts: [], restorePending: false, message: null, calendar: null })
 })
 afterEach(() => vi.unstubAllGlobals())
 it('retries a stale revision without losing independently created tasks and sends the account guard header', async () => {
@@ -41,12 +41,73 @@ it('pauses on a true conflict and uploads the selected resolution only after an 
   expect(await syncAccount('local')).toBe(true)
   expect((await db.issues.get('task-1'))?.title).toBe('端末の変更')
 })
+it('pauses before writing for a removed status and applies a valid resolution after explicit choice', async () => {
+  const base = await readSyncData()
+  base.workflows[0].statuses.push({ id: 'review', name: 'レビュー中', category: 'doing' })
+  await db.accountSync.put({ id: 'main', revision: 1, baseline: base, lastSyncedAt: 0 })
+  await db.workflows.put(base.workflows[0])
+  await db.issues.put(fixtureIssue({ statusId: 'review' }))
+  const remote = structuredClone(base)
+  remote.workflows[0].statuses.pop()
+  const fetcher = vi.fn().mockImplementation(async (_path: string, request: RequestInit) => {
+    if (request.method !== 'PUT') return Response.json({ revision: 2, data: remote })
+    const { data } = JSON.parse(String(request.body))
+    expect(isSyncData(data)).toBe(true)
+    return Response.json({ revision: 3, data })
+  })
+  vi.stubGlobal('fetch', fetcher)
+  expect(await syncAccount()).toBe(false)
+  expect(fetcher).toHaveBeenCalledTimes(1)
+  expect(useAccountStore.getState().conflicts).toEqual(['ステータス参照（資料を作る）'])
+  expect((await db.issues.get('task-1'))?.statusId).toBe('review')
+  expect(await syncAccount('remote')).toBe(true)
+  expect(fetcher).toHaveBeenCalledTimes(3)
+  expect((await db.issues.get('task-1'))?.statusId).toBe('account-doing')
+  expect(useAccountStore.getState().conflicts).toEqual([])
+})
+it('keeps the local data and its baseline when a status collision arises during the cloud request', async () => {
+  const base = await readSyncData()
+  base.workflows[0].statuses.push({ id: 'review', name: 'レビュー中', category: 'doing' })
+  await db.accountSync.put({ id: 'main', revision: 1, baseline: base, lastSyncedAt: 0 })
+  await db.workflows.put(base.workflows[0])
+  const remote = structuredClone(base)
+  remote.workflows[0].statuses.pop()
+  const fetcher = vi.fn().mockImplementationOnce(async () => {
+    await db.issues.put(fixtureIssue({ statusId: 'review' }))
+    return Response.json({ revision: 2, data: remote })
+  })
+  vi.stubGlobal('fetch', fetcher)
+  expect(await syncAccount()).toBe(false)
+  expect(fetcher).toHaveBeenCalledTimes(1)
+  expect(useAccountStore.getState().conflicts).toEqual(['ステータス参照（資料を作る）'])
+  expect((await db.issues.get('task-1'))?.statusId).toBe('review')
+  expect((await db.accountSync.get('main'))?.revision).toBe(1)
+  expect(isSyncData(await readSyncData())).toBe(true)
+})
 it('preserves offline tasks and asks for login after an expired session', async () => {
   await db.issues.put(fixtureIssue())
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ error: '再ログインしてください' }, { status: 401 })))
   expect(await syncAccount()).toBe(false)
   expect(await db.issues.count()).toBe(1)
   expect(useAccountStore.getState().authenticated).toBe(false)
+})
+it('drops a stale sync snapshot if another tab completes a restore during the cloud read', async () => {
+  await db.issues.put(fixtureIssue({ title: '復元前の未送信タスク' }))
+  const captured = await readSyncData()
+  const data = initialSyncData(0)
+  const restored = { revision: 1, data }
+  const fetcher = vi.fn()
+    .mockImplementationOnce(async () => {
+      await beginAccountRestore({ id: 'restore', accountId: 'alice', expectedRevision: 0, target: data, theme: 'system' }, captured)
+      await finishAccountRestore('restore', restored, captured)
+      return Response.json(restored)
+    })
+    .mockResolvedValueOnce(Response.json(restored))
+  vi.stubGlobal('fetch', fetcher)
+  expect(await syncAccount()).toBe(true)
+  expect(fetcher).toHaveBeenCalledTimes(2)
+  expect(fetcher.mock.calls.every(([, init]) => init.method !== 'PUT')).toBe(true)
+  expect(await readSyncData()).toEqual(data)
 })
 it('does not clear a Calendar conflict by performing a second task sync', async () => {
   const captured = await readSyncData()
