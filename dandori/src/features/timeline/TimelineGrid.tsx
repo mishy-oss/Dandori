@@ -49,7 +49,7 @@ export function TimelineGrid({ gridRef, range, blocks, drag, trayDurationMin, no
         onContextMenu={(event) => event.preventDefault()}>
         <div aria-hidden className="pointer-events-none absolute bottom-0 left-[21px] top-0 w-0.5 bg-border" />
         {hours.map((hour) => (
-          <div key={hour} aria-hidden className="pointer-events-none absolute -left-11 w-9 -translate-y-1/2 text-right text-[10px] tabular-nums text-muted" style={{ top: minToY(hour * 60, range), opacity: nowMin !== null && Math.abs(nowMin - hour * 60) < 8 ? 0 : 1 }}>{formatMin(hour * 60)}</div>
+          <div key={hour} aria-hidden className="pointer-events-none absolute -left-11 w-9 -translate-y-1/2 text-right text-xs tabular-nums text-muted" style={{ top: minToY(hour * 60, range), opacity: nowMin !== null && Math.abs(nowMin - hour * 60) < 8 ? 0 : 1 }}>{formatMin(hour * 60)}</div>
         ))}
         {drag?.kind === 'tray' && drag.startMin !== null && <div aria-hidden className="pointer-events-none absolute inset-x-0 rounded-3xl border border-dashed border-accent bg-accent/5" style={{ top: minToY(drag.startMin, range), height: trayDurationMin * PX_PER_MIN }} />}
         {shown.map(({ issue, startMin, durationMin }) => {
@@ -75,14 +75,14 @@ export function TimelineGrid({ gridRef, range, blocks, drag, trayDurationMin, no
               className={`timeline-block group absolute ${narrow ? 'touch-auto' : 'touch-pan-y'} select-none rounded-2xl text-left [-webkit-touch-callout:none] ${active ? 'z-20 bg-surface shadow-lg ring-1 ring-accent/40' : 'z-10'} ${done ? 'opacity-45' : ''}`}
               style={{ '--task-color': color, top: minToY(startMin, range), height: blockHeight, left: `calc(${layout.column * 100 / layout.columns}% + 1px)`, width: `calc(${100 / layout.columns}% - 3px)`, background: 'color-mix(in srgb, var(--task-color) 12%, var(--surface))', borderLeft: '3px solid var(--task-color)', transition: active ? 'none' : 'top 120ms ease-out, height 120ms ease-out' } as CSSProperties}>
               {compact ? <div className="flex h-full min-w-0 items-center gap-1 px-1">
-                <p className={`min-w-0 flex-1 truncate text-[11px] font-semibold ${done ? 'line-through' : ''}`}>{issue.recurrenceId && '↻ '}{issue.title}</p>{completion}
+                <p className={`min-w-0 flex-1 truncate text-xs font-semibold ${done ? 'line-through' : ''}`}>{issue.recurrenceId && '↻ '}{issue.title}</p>{completion}
               </div> : <div className="sticky top-2 min-w-0 overflow-hidden px-2 py-1" style={{ maxHeight: blockHeight }}>
                 {/* 長時間の予定は中央寄せだと画面外になるため、スクロール中も上端で内容を読めるようにする。 */}
                 <div className="flex min-w-0 items-center gap-1">
-                  <p className="min-w-0 flex-1 text-[10px] tabular-nums leading-snug text-muted">{formatMin(startMin)}–<wbr />{formatMin(startMin + durationMin)}<span className="block">{durationMin} 分</span></p>{completion}
+                  <p className="min-w-0 flex-1 text-xs tabular-nums leading-snug text-muted">{formatMin(startMin)}–<wbr />{formatMin(startMin + durationMin)}<span className="block">{durationMin} 分</span></p>{completion}
                 </div>
-                <p className={`overflow-hidden break-words text-[13px] font-semibold leading-snug ${done ? 'line-through' : ''}`} style={{ display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: blockHeight >= 160 ? 4 : blockHeight >= 110 ? 2 : 1 }}>{issue.recurrenceId && '↻ '}{issue.title}</p>
-                {(issue.carryoverToId || issue.carryoverFromId) && <p className="mt-1 truncate text-[10px] text-muted">{issue.carryoverToId ? '翌日以降へ持ち越し済み' : '過去の予定から持ち越し'}</p>}
+                <p className={`overflow-hidden break-words text-sm font-semibold leading-snug ${done ? 'line-through' : ''}`} style={{ display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: blockHeight >= 160 ? 4 : blockHeight >= 110 ? 2 : 1 }}>{issue.recurrenceId && '↻ '}{issue.title}</p>
+                {(issue.carryoverToId || issue.carryoverFromId) && <p className="mt-1 truncate text-xs text-muted">{issue.carryoverToId ? '翌日以降へ持ち越し済み' : '過去の予定から持ち越し'}</p>}
               </div>}
               {!issue.carryoverToId && <><div data-resize-top-id={issue.id} aria-hidden className="absolute left-0 top-0 flex h-2 touch-none items-start justify-center" style={{ width: narrow ? 30 : 44 }}><span className="resize-grip mt-0.5 h-0.5 w-4 rounded-full bg-white" /></div>
               <div data-resize-id={issue.id} aria-hidden className="absolute bottom-0 left-0 flex h-2 touch-none items-end justify-center" style={{ width: narrow ? 30 : 44 }}><span className="resize-grip mb-0.5 h-0.5 w-4 rounded-full bg-white" /></div></>}
@@ -91,7 +91,7 @@ export function TimelineGrid({ gridRef, range, blocks, drag, trayDurationMin, no
         })}
         {nowMin !== null && nowMin >= range.startMin && nowMin <= range.endMin && (
           <div aria-hidden data-now-line className="pointer-events-none absolute inset-x-0 z-30" style={{ top: minToY(nowMin, range) }}>
-            <span className="absolute -left-11 w-9 -translate-y-1/2 text-right text-[10px] font-semibold tabular-nums text-accent">{formatMin(nowMin)}</span>
+            <span className="absolute -left-11 w-9 -translate-y-1/2 text-right text-xs font-semibold tabular-nums text-accent">{formatMin(nowMin)}</span>
             <span className="absolute left-[18px] size-2 -translate-y-1/2 rounded-full bg-accent ring-4 ring-surface" />
             <span className="absolute left-7 right-0 h-px bg-gradient-to-r from-accent/60 to-transparent" />
           </div>

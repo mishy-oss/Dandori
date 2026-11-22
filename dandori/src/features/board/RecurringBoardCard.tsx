@@ -55,10 +55,10 @@ export function RecurringBoardCard({ group, relatedIssues = [], rule, statuses, 
         className="flex min-h-20 min-w-0 flex-1 items-center gap-3 rounded-xl p-4 pr-1 text-left">
         <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-accent/10 text-accent"><Icon name="timeline" className="size-5" /></span>
         <span className="min-w-0 flex-1">
-          <span className="mb-1 block text-[10px] font-medium text-muted">↻ {frequencyLabel(rule)} · {group.occurrences.length}回分</span>
+          <span className="mb-1 block text-xs font-medium text-muted">↻ {frequencyLabel(rule)} · {group.occurrences.length}回分</span>
           <span className="block truncate text-sm font-semibold">{group.issue.title}</span>
           <TaskRelations issue={group.issue} issues={relatedIssues} doneIds={doneIds} />
-          <span className="mt-1 block text-[11px] text-muted">完了 {doneCount}/{group.occurrences.length}{!allDone && ` · 次の未完了 ${occurrenceLabel(group.issue)}`}</span>
+          <span className="mt-1 block text-xs text-muted">完了 {doneCount}/{group.occurrences.length}{!allDone && ` · 次の未完了 ${occurrenceLabel(group.issue)}`}</span>
         </span>
       </button>
       <button type="button" data-no-drag aria-expanded={expanded} aria-controls={detailsId}
@@ -73,7 +73,7 @@ export function RecurringBoardCard({ group, relatedIssues = [], rule, statuses, 
         onClick={() => void run(() => onToggleDone(group.issue.id))}>次の1件を完了</button>}
       {allDone && !expanded && <p className="px-4 pb-4 text-xs text-muted">この月の予定はすべて完了しました</p>}
       <div id={detailsId} hidden={!expanded} className="border-t border-border">
-        <p className="px-4 pt-3 text-[10px] text-muted">日付を押すと編集できます。完了やステータス変更は、その回だけに反映されます。</p>
+        <p className="px-4 pt-3 text-xs text-muted">日付を押すと編集できます。完了やステータス変更は、その回だけに反映されます。</p>
         <ul className="divide-y divide-border px-2">
           {group.occurrences.map((issue) => {
             const done = doneIds.has(issue.statusId)
@@ -85,17 +85,17 @@ export function RecurringBoardCard({ group, relatedIssues = [], rule, statuses, 
               </button>
               <button type="button" className="min-h-11 min-w-0 flex-1 text-left" onClick={() => onOpen(issue)}>
                 <span className={`block text-xs font-medium ${done ? 'text-muted line-through' : ''}`}>{occurrenceLabel(issue)}</span>
-                <span className="block truncate text-[10px] text-muted">{formatIssueNumber(issue.number)}{issue.title !== group.issue.title && ` · ${issue.title}`}</span>
+                <span className="block truncate text-xs text-muted">{formatIssueNumber(issue.number)}{issue.title !== group.issue.title && ` · ${issue.title}`}</span>
                 <TaskRelations issue={issue} issues={relatedIssues} doneIds={doneIds} />
               </button>
               <div className="col-start-2 flex min-w-0 flex-wrap items-center gap-2">
               <select aria-label={`${occurrenceLabel(issue)} のステータス`} value={issue.statusId} disabled={busy}
-                className="min-h-11 min-w-0 max-w-full flex-1 rounded-lg border border-border bg-surface-2 px-2 text-[11px] disabled:opacity-40"
+                className="min-h-11 min-w-0 max-w-full flex-1 rounded-lg border border-border bg-surface-2 px-2 text-base disabled:opacity-40"
                 onChange={(event) => { const statusId = event.target.value; void run(() => onChangeStatus(issue.id, statusId)) }}>
                 {statuses.map((status) => <option key={status.id} value={status.id}>{status.name}</option>)}
               </select>
               {onMove && <button type="button" disabled={busy} aria-label={`${occurrenceLabel(issue)} — ${issue.title}の対象月を変更`}
-                className="min-h-11 shrink-0 rounded-lg border border-border px-3 text-[11px] text-muted disabled:opacity-40"
+                className="min-h-11 shrink-0 rounded-lg border border-border px-3 text-xs text-muted disabled:opacity-40"
                 onClick={() => onMove(issue)}>対象月</button>}
               </div>
               <div className="col-start-2 min-w-0"><CarryoverTrail issue={issue} issues={relatedIssues} onOpen={onOpen} /></div>
