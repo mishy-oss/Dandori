@@ -9,6 +9,7 @@ import { groupBoardIssues } from '../features/board/recurringGroups'
 import { readSyncData } from '../features/account/accountRepo'
 import { initialSyncData, importGuestData, isSyncData, mergeSyncData } from '../features/account/syncModel'
 import { createBackup } from './backupRepo'
+import { editRecurringIssue } from './recurringEditRepo'
 
 beforeEach(async () => {
   await Promise.all(db.tables.map(table => table.clear()))
@@ -91,6 +92,26 @@ it('preserves prior month snapshots and does not roll archived records into the 
   expect((await getIssue(next.id))?.date).toBe('2026-12-01')
 })
 
+it('keeps parent history intact when only the carried child changes month and is later completed', async () => {
+  const { project, source, done, doneIds } = await setup()
+  const child = await createIssue({ projectId: project.id, title: '未完了の子', parentId: source.id, date: '2026-11-30', planningMonth: '2026-11' })
+  const target = await carryoverIssue(source.id, { date: '2026-11-30', startMin: 600, durationMin: 30 })
+  const childTarget = (await listIssues(project.id)).find(issue => issue.carryoverFromId === child.id)!
+  const archivedBefore = [await getIssue(source.id), await getIssue(child.id)]
+  await updateIssue(childTarget.id, { planningMonth: '2027-01', date: null, startMin: null })
+  await prepareMonthlyProject(project.id, '2026-12', '2026-12-01')
+  expect((await getIssue(target.id))?.planningMonth).toBe('2026-12')
+  expect(await getIssue(childTarget.id)).toMatchObject({ parentId: target.id, planningMonth: '2027-01' })
+  await updateIssue(childTarget.id, { statusId: done.id })
+  expect((await getIssue(target.id))?.statusId).toBe(done.id)
+  await expect(deleteIssue(source.id)).rejects.toThrow('履歴')
+  await prepareMonthlyProject(project.id, '2027-02', '2027-02-01')
+  expect([await getIssue(source.id), await getIssue(child.id)]).toEqual(archivedBefore)
+  const all = await listIssues(project.id)
+  expect(monthlyWork(all, '2027-01', doneIds)).toEqual({ totalCount: 1, remainingCount: 0 })
+  expect(monthlyWork(all, '2027-02', doneIds)).toEqual({ totalCount: 0, remainingCount: 0 })
+})
+
 it('carries one recurring occurrence without cloning its rule or contaminating future occurrences', async () => {
   const { project } = await setup()
   const recurring = await createIssue({ projectId: project.id, title: '定期作業', planningMonth: '2026-11', date: '2026-11-18', startMin: 600, recurrence: { frequency: 'daily', interval: 1 } })
@@ -100,6 +121,21 @@ it('carries one recurring occurrence without cloning its rule or contaminating f
   const december = (await listIssues(project.id)).filter(issue => issue.date?.startsWith('2026-12'))
   expect(december).toHaveLength(31)
   expect(december.every(issue => !issue.carryoverToId && !issue.carryoverFromId)).toBe(true)
+})
+
+it('keeps the carried copy independent when the recurring series is edited later', async () => {
+  const { project } = await setup()
+  const recurring = await createIssue({ projectId: project.id, title: '日課', planningMonth: '2026-11', date: '2026-11-29', startMin: 600, recurrence: { frequency: 'daily', interval: 1 } })
+  const copy = await carryoverIssue(recurring.id, { date: '2026-11-30', startMin: 660, durationMin: 30 })
+  const archived = await getIssue(recurring.id)
+  const subsequent = (await listIssues(project.id)).find(issue => issue.recurrenceId === recurring.recurrenceId && issue.date === '2026-11-30')!
+  await expect(editRecurringIssue(recurring.id, { title: '変更不可' }, 'future')).rejects.toThrow('履歴')
+  await editRecurringIssue(subsequent.id, { title: '新しい日課' }, 'future')
+  await prepareMonthlyProject(project.id, '2026-12', '2026-12-01')
+  expect(await getIssue(recurring.id)).toEqual(archived)
+  expect(await getIssue(copy.id)).toMatchObject({ title: '日課', recurrenceId: null, date: '2026-11-30', planningMonth: '2026-12' })
+  const future = (await listIssues(project.id)).filter(issue => issue.date === '2026-12-01' && issue.recurrenceId)
+  expect(future.map(issue => issue.title)).toEqual(['新しい日課'])
 })
 
 it('keeps all-day events and creates independent calendar links for the new attempt', async () => {

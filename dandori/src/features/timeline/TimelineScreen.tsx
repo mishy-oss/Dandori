@@ -12,7 +12,7 @@ import { WeekStrip } from './WeekStrip'
 import { PX_PER_MIN, clampMove, nowMin, visibleRange, weekDays } from './timelineLogic'
 import { useNow } from './useNow'
 import { useTimelineGestures } from './useTimelineGestures'
-import { Icon } from '../../app/Icon'
+import { DateJumpButton } from '../../app/DateJumpButton'
 import { CarryoverDialog } from '../issue-editor/CarryoverDialog'
 import { currentWork } from '../../lib/carryover'
 
@@ -134,12 +134,9 @@ export function TimelineScreen() {
         <h1 className="flex-1 text-[25px] font-semibold tracking-[-0.04em]">
           <span className="mr-2 font-medium text-accent">{format(parseISO(selected), 'yyyy年')}</span>{title}
         </h1>
-        <button type="button" data-no-drag aria-label="今日へジャンプ" title="今日の現在時刻へ移動"
-          onClick={jumpToToday}
-          className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border border-accent/25 bg-surface px-3 text-xs font-medium text-accent">
-          <Icon name="clock" className="size-4" />
+        <DateJumpButton aria-label="今日へジャンプ" title="今日の現在時刻へ移動" onClick={jumpToToday}>
           今日へ
-        </button>
+        </DateJumpButton>
       </div>
 
       <WeekStrip
@@ -153,7 +150,7 @@ export function TimelineScreen() {
 
 
       <div className="timeline-sheet flex min-h-0 flex-1 flex-col">
-      {overdue.length > 0 && <details data-no-drag className="mx-4 shrink-0 rounded-xl border border-border bg-surface px-3 text-xs">
+      {overdue.length > 0 && <details data-no-drag className="mx-4 mt-3 shrink-0 rounded-xl border border-border bg-surface px-3 text-xs">
         <summary className="min-h-11 cursor-pointer py-3">過去の未完了（{overdue.length}件）</summary>
         <ul className="max-h-48 overflow-y-auto">{overdue.sort((a, b) => a.date!.localeCompare(b.date!)).map(issue => <li key={issue.id} className="flex items-center gap-2 border-t border-border">
           <button type="button" className="min-h-11 min-w-0 flex-1 truncate text-left" onClick={() => setEditor({ issue })}>{issue.date} · {issue.title}</button>

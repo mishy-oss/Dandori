@@ -7,16 +7,17 @@ import { parseBackup } from '../../db/backupImport'
 import { createIssue } from '../../db/issueRepo'
 import { createProject } from '../../db/projectRepo'
 import { readSyncData, saveLocalImport } from '../account/accountRepo'
-import { initialSyncData } from '../account/syncModel'
-import { useAccountStore } from '../account/accountStore'
+import { initialSyncData, type SyncDocument } from '../account/syncModel'
+import { fixtureIssue } from '../account/syncFixtures'
+import { syncAccount, useAccountStore } from '../account/accountStore'
 import { useDataStore } from '../../store/data'
-import { prepareBackupRestore, restorePreparedBackup } from './restoreBackup'
+import { prepareBackupRestore, restorePreparedBackup, resumeAccountRestore } from './restoreBackup'
 import { RestoreBackupDialog } from './BackupImportSection'
 
 const refresh = vi.fn().mockResolvedValue(undefined)
 beforeEach(async () => {
   await Promise.all(db.tables.map(table => table.clear()))
-  useAccountStore.setState({ user: null, authenticated: false, busy: false, calendar: null, conflicts: [], error: null })
+  useAccountStore.setState({ user: null, authenticated: false, busy: false, calendar: null, conflicts: [], restorePending: false, error: null })
   useDataStore.setState({ refreshPlanning: refresh })
   refresh.mockClear()
 })
@@ -82,6 +83,8 @@ it('does not retry a stale cloud confirmation or replace local data on a revisio
   await expect(restorePreparedBackup(session)).rejects.toThrow('他端末で更新')
   expect(fetcher).toHaveBeenCalledTimes(2)
   expect(await readSyncData()).toEqual(current)
+  expect((await db.accountSync.get('main'))?.pendingRestore).toBeUndefined()
+  expect(useAccountStore.getState().restorePending).toBe(false)
   expect(useAccountStore.getState().busy).toBe(false)
 })
 
@@ -107,13 +110,17 @@ it('confirms a completed cloud write after its response is lost without writing 
   expect((await db.accountSync.get('main'))?.revision).toBe(6)
 })
 
-it('reports a committed cloud restore and stops automatic sync if saving the local copy fails', async () => {
+it('blocks normal sync after restart and finishes a committed restore without uploading old local tasks', async () => {
   const file = await fileFixture()
   const current = initialSyncData(1)
+  current.issues.push(fixtureIssue({ title: '復元前の未送信タスク' }))
   await saveLocalImport(current)
   account()
-  const fetcher = vi.fn().mockResolvedValueOnce(Response.json({ revision: 5, data: current }))
-    .mockImplementationOnce(async (_path: string, init: RequestInit) => Response.json({ revision: 6, data: JSON.parse(String(init.body)).data }))
+  let remote: SyncDocument = { revision: 5, data: initialSyncData(1) }
+  const fetcher = vi.fn(async (_path: string, init: RequestInit) => {
+    if (init.method === 'PUT') remote = { revision: 6, data: JSON.parse(String(init.body)).data }
+    return Response.json(remote)
+  })
   vi.stubGlobal('fetch', fetcher)
   const session = await prepareBackupRestore(file, 'light')
   const fail = () => { throw new Error('quota') }
@@ -121,8 +128,79 @@ it('reports a committed cloud restore and stops automatic sync if saving the loc
   try { await expect(restorePreparedBackup(session)).rejects.toThrow('クラウドへの復元は完了') }
   finally { db.issues.hook('creating').unsubscribe(fail) }
   expect(await readSyncData()).toEqual(current)
-  expect(useAccountStore.getState().conflicts).toHaveLength(1)
+  expect((await db.accountSync.get('main'))?.pendingRestore?.target).toEqual(remote.data)
+  expect(useAccountStore.getState().restorePending).toBe(true)
   expect(useAccountStore.getState().busy).toBe(false)
+  useAccountStore.setState({ restorePending: false, conflicts: [], error: null })
+  expect(await syncAccount()).toBe(false)
+  expect(await syncAccount('local')).toBe(false)
+  expect(fetcher).toHaveBeenCalledTimes(2)
+  expect(await resumeAccountRestore()).toEqual({ warning: null, theme: 'dark' })
+  expect(await readSyncData()).toEqual(remote.data)
+  expect((await db.accountSync.get('main'))?.baseline).toEqual(remote.data)
+  expect((await db.accountSync.get('main'))?.pendingRestore).toBeUndefined()
+  expect(useAccountStore.getState().restorePending).toBe(false)
+  expect(await syncAccount()).toBe(true)
+  expect(fetcher.mock.calls.filter(([, init]) => init.method === 'PUT')).toHaveLength(1)
+})
+
+it('retries an unconfirmed restore with the original revision after checking that the cloud is unchanged', async () => {
+  const file = await fileFixture()
+  const current = initialSyncData(1)
+  await saveLocalImport(current)
+  account()
+  let remote = { revision: 5, data: current }
+  let offline = false
+  let firstWrite = true
+  const fetcher = vi.fn(async (_path: string, init: RequestInit) => {
+    if (offline) throw new TypeError('offline')
+    if (init.method === 'PUT') {
+      if (firstWrite) { firstWrite = false; offline = true; throw new TypeError('request lost') }
+      const { revision, data } = JSON.parse(String(init.body))
+      expect(revision).toBe(5)
+      expect((await db.accountSync.get('main'))?.pendingRestore?.retryStarted).toBe(true)
+      remote = { revision: 6, data }
+    }
+    return Response.json(remote)
+  })
+  vi.stubGlobal('fetch', fetcher)
+  const session = await prepareBackupRestore(file, 'light')
+  await expect(restorePreparedBackup(session)).rejects.toThrow('クラウドへの復元を確認できません')
+  expect(await readSyncData()).toEqual(current)
+  expect(useAccountStore.getState().restorePending).toBe(true)
+  offline = false
+  await resumeAccountRestore()
+  expect(await readSyncData()).toEqual(remote.data)
+  expect((await db.accountSync.get('main'))?.pendingRestore).toBeUndefined()
+})
+
+it('preserves edits made during the cloud write and accepts newer cloud data only on explicit selection', async () => {
+  const file = await fileFixture()
+  const current = initialSyncData(1)
+  await saveLocalImport(current)
+  account()
+  let remote = { revision: 5, data: current }
+  const fetcher = vi.fn(async (_path: string, init: RequestInit) => {
+    if (init.method === 'PUT') {
+      await db.issues.put(fixtureIssue({ title: '通信中に編集した端末タスク' }))
+      remote = { revision: 6, data: JSON.parse(String(init.body)).data }
+    }
+    return Response.json(remote)
+  })
+  vi.stubGlobal('fetch', fetcher)
+  const session = await prepareBackupRestore(file, 'light')
+  await expect(restorePreparedBackup(session)).rejects.toThrow('端末のデータが更新')
+  expect((await db.issues.get('task-1'))?.title).toBe('通信中に編集した端末タスク')
+  expect((await db.accountSync.get('main'))?.pendingRestore).toBeDefined()
+  const newer = structuredClone(remote.data)
+  newer.issues[0].title = '他端末で復元後に変更'
+  remote = { revision: 7, data: newer }
+  await expect(resumeAccountRestore()).rejects.toThrow('別の端末でクラウドが更新')
+  expect((await db.issues.get('task-1'))?.title).toBe('通信中に編集した端末タスク')
+  expect(await resumeAccountRestore(true)).toEqual({ warning: null })
+  expect(await readSyncData()).toEqual(newer)
+  expect((await db.accountSync.get('main'))?.revision).toBe(7)
+  expect(fetcher.mock.calls.filter(([, init]) => init.method === 'PUT')).toHaveLength(1)
 })
 
 it('rejects a backup exceeding account sync capacity before making any cloud write', async () => {

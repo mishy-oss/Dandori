@@ -2,6 +2,7 @@ import { beforeEach, expect, it } from 'vitest'
 import { db, DandoriDB } from '../../db/db'
 import { acceptSyncedData, initializeAccountDatabase, readSyncData, saveLocalImport } from './accountRepo'
 import { fixtureIssue } from './syncFixtures'
+import { mergeSyncData } from './syncModel'
 import { createIssue, updateIssue } from '../../db/issueRepo'
 
 beforeEach(async () => { await Promise.all(db.tables.map(table => table.clear())); await initializeAccountDatabase() })
@@ -22,8 +23,13 @@ it('keeps edits and new tasks made while a cloud request was in flight', async (
   await acceptSyncedData(captured, { revision: 3, data: cloud })
   expect((await db.issues.get('task-1'))?.title).toBe('通信中の変更')
   expect(await db.issues.count()).toBe(3)
-  expect((await db.accountSync.get('main'))?.baseline.issues[0].title).toBe('資料を作る')
-  expect((await db.accountSync.get('main'))?.revision).toBe(3)
+  const metadata = (await db.accountSync.get('main'))!
+  expect(metadata.baseline.issues[0].title).toBe('資料を作る')
+  expect(metadata.revision).toBe(3)
+  const nextSync = mergeSyncData(metadata.baseline, await readSyncData(), cloud)
+  expect(nextSync.conflicts).toEqual([])
+  expect(nextSync.data.issues.find(issue => issue.id === 'task-1')?.title).toBe('通信中の変更')
+  expect(nextSync.data.issues.some(issue => issue.id === 'local')).toBe(true)
 })
 it('preserves independent local databases and does not mark an import as uploaded', async () => {
   const other = new DandoriDB('account-repo-other-test')
