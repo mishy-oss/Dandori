@@ -41,7 +41,7 @@ export function IssueLabelsField({
         <button type="button" disabled={!normalizeLabel(labelDraft)} className="min-h-11 rounded-lg border border-border px-3 text-sm disabled:opacity-40"
           onClick={() => addLabel(labelDraft)}>追加</button>
       </div>
-      <p id={labelHelpId} className="text-[11px] text-muted">候補を押すと追加できます。前後・連続する空白、全角・半角、英字の大小文字の違いは同じラベルとして扱います。</p>
+      <p id={labelHelpId} className="text-xs text-muted">候補を押すと追加できます。前後・連続する空白、全角・半角、英字の大小文字の違いは同じラベルとして扱います。</p>
       {labelSuggestions.length > 0 ? <div>
         <p className="mb-1 text-xs text-muted">既存のラベルから選択</p>
         <ul aria-label="ラベルの候補" className="flex max-h-36 flex-wrap gap-2 overflow-y-auto">

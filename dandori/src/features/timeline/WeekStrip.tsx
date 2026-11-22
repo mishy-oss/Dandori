@@ -37,8 +37,8 @@ export function WeekStrip({
               onClick={() => onSelect(d)}
               className="relative flex min-h-[68px] flex-col items-center justify-center gap-1 rounded-full text-xs"
             >
-              <span className="text-[10px] font-normal text-muted">{format(date, 'E', { locale: ja })}</span>
-              <span className={`flex size-8 items-center justify-center rounded-full text-[14px] font-semibold ${isSelected ? 'bg-accent text-accent-text' : d === today ? 'text-accent ring-1 ring-accent/40' : 'text-text'}`}>{format(date, 'd')}</span>
+              <span className="text-xs font-normal text-muted">{format(date, 'E', { locale: ja })}</span>
+              <span className={`flex size-8 items-center justify-center rounded-full text-sm font-semibold ${isSelected ? 'bg-accent text-accent-text' : d === today ? 'text-accent ring-1 ring-accent/40' : 'text-text'}`}>{format(date, 'd')}</span>
               {marked.has(d) && (
                 <span
                   aria-hidden

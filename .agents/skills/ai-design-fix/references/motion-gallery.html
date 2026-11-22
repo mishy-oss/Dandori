@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Motion stage</title>
+<!--
+  Working reference for references/motions.md. One self-contained file, no dependencies.
+  Open it and move the pointer over the stage; add #tour to the address to watch the guide cursor.
+  This is one answer, for a product made of modules: a card drawer, a thread and a board. Copy the engine (poses,
+  spring, pointer mapping), then design arrangements from the metaphor of the product in hand. Do not ship this look.
+-->
+<style>
+:root {
+    --page: #e9ebed;
+    --ink: #101419;
+    --muted: #5a636d;
+    --line: #cfd4d9;
+    --card: #fbfcfc;
+    --well: #eef0f2;
+    --accent: #d8431f;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+    --card-w: 240px;
+    --card-h: 270px;
+    --ease: cubic-bezier(.22, 1, .36, 1);
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--page); color: var(--ink); font-family: var(--sans); }
+.stage { position: relative; min-height: 100svh; display: flex; flex-direction: column; padding: 20px clamp(16px, 3vw, 40px); overflow: clip; }
+
+.bar { position: relative; z-index: 200; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.bar p { margin: 0; font: 500 12px/1 var(--mono); color: var(--muted); }
+.views { display: flex; gap: 4px; }
+.views button { min-height: 32px; padding: 0 12px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--muted); font: 500 13px var(--sans); cursor: pointer; transition: border-color .2s var(--ease), color .2s var(--ease); }
+.views button:hover { color: var(--ink); }
+.views button[aria-pressed="true"] { border-color: var(--ink); color: var(--ink); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.headline { position: relative; z-index: 170; margin: clamp(20px, 5vh, 48px) 0 0; font-weight: 700; font-size: clamp(34px, 4.4vw, 64px); line-height: 1.02; letter-spacing: -.035em; }
+.is-live .headline { max-width: 38vw; }
+.is-live.in-board .headline { max-width: none; }
+.is-live.in-thread .headline { max-width: 62vw; }
+.headline.swap { animation: rise .45s var(--ease) both; }
+@keyframes rise { from { opacity: 0; transform: translate3d(0, 10px, 0); } to { opacity: 1; transform: none; } }
+
+/* Without JavaScript and on phones the cards are an ordinary list. */
+.cards { position: relative; z-index: 2; list-style: none; margin: 24px 0 0; padding: 22px 0 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 30px 12px; }
+.card { position: relative; display: block; width: 100%; padding: 0 10px 12px; border: 1px solid var(--line); border-radius: 0 8px 8px 8px; background: var(--card); color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.card::before { content: attr(data-tab); position: absolute; left: -1px; bottom: 100%; padding: 4px 10px 3px; border: 1px solid var(--line); border-bottom: 0; border-radius: 6px 6px 0 0; background: var(--card); font: 500 11px var(--mono); color: var(--muted); transform: translateX(var(--tab, 0)); }
+.card.is-focus::before { color: var(--accent); }
+.card-name { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 9px 2px; font-weight: 650; font-size: 15px; }
+.card-name small { font: 400 11px var(--mono); color: var(--muted); }
+.thumb { display: block; aspect-ratio: 1 / .78; border-radius: 4px; background: var(--well); overflow: hidden; }
+.thumb svg { display: block; width: 100%; height: 100%; }
+
+/* A thumbnail holds a still frame until its card is the focused one. */
+.thumb * { animation-play-state: paused; }
+.card.is-focus .thumb * { animation-play-state: running; }
+.t-bar { animation: t-bar 1.8s var(--ease) infinite alternate; transform-box: fill-box; transform-origin: bottom; }
+@keyframes t-bar { from { transform: scaleY(.45); } to { transform: none; } }
+.t-draw { stroke-dasharray: 1; animation: t-draw 2.8s var(--ease) infinite; }
+@keyframes t-draw { from { stroke-dashoffset: 1; } 70%, to { stroke-dashoffset: 0; } }
+.t-row { animation: t-row 2.8s var(--ease) infinite; }
+@keyframes t-row { from { transform: translate3d(0, -22px, 0); opacity: 0; } 25%, to { transform: none; opacity: 1; } }
+.t-tick { animation: t-tick 2.4s steps(1) infinite; }
+@keyframes t-tick { 0%, 40% { fill: var(--line); } 41%, 100% { fill: var(--accent); } }
+
+.caption { display: none; }
+.wire-seg, .leader, .leader-dot { display: none; }
+
+.is-live .cards { position: absolute; inset: 0; margin: 0; padding: 0; display: block; perspective: 1500px; pointer-events: none; }
+.is-live .cards > li { position: absolute; left: 50%; top: 56%; width: var(--card-w); margin: calc(var(--card-h) / -2) 0 0 calc(var(--card-w) / -2); will-change: transform, opacity; backface-visibility: hidden; }
+.is-live .card { pointer-events: auto; box-shadow: 0 -1px 0 rgb(16 20 25 / .04), 0 14px 26px -18px rgb(16 20 25 / .4); }
+/* Lines are 1 px boxes that only get a transform: moving them repaints nothing, unlike a full-page SVG. */
+.is-live .wire-seg, .is-live .leader, .is-live .leader-dot { display: block; position: absolute; left: 0; top: 0; pointer-events: none; will-change: transform; }
+.is-live .wire-seg, .is-live .leader { width: 1px; transform-origin: 0 50%; }
+.is-live .wire-seg { z-index: 5; height: 2px; background: var(--line); opacity: 0; transition: opacity .4s var(--ease); }
+.is-live.in-thread:not(.is-open) .wire-seg { opacity: 1; }
+.is-live .leader { z-index: 160; height: 1px; background: var(--ink); }
+.is-live .leader-dot { z-index: 160; width: 7px; height: 7px; margin: -3.5px 0 0 -3.5px; border-radius: 50%; background: var(--accent); }
+.packet { display: none; }
+.is-live.in-thread:not(.is-open) .packet { display: block; position: absolute; z-index: 6; left: 0; top: 0; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); pointer-events: none; animation: packet 8s linear infinite; }
+@keyframes packet { from { offset-distance: 0%; } to { offset-distance: 100%; } }
+
+.is-live .caption { display: block; position: absolute; z-index: 170; left: clamp(16px, 3vw, 40px); top: 44%; width: min(320px, 27vw); transition: opacity .3s var(--ease), visibility .3s; }
+.is-live.in-thread:not(.is-open) .caption { left: auto; right: clamp(16px, 3vw, 40px); top: 64px; }
+.is-live.in-board:not(.is-open) .caption { opacity: 0; visibility: hidden; }
+.is-live.in-board:not(.is-open) .leader, .is-live.in-board:not(.is-open) .leader-dot { display: none; }
+.caption-top { margin: 0 0 8px; font: 500 12px var(--mono); color: var(--muted); }
+.caption-body.swap { animation: rise .3s var(--ease) both; }
+.caption h3 { margin: 0 0 6px; font-weight: 650; font-size: 24px; letter-spacing: -.02em; }
+.caption-text { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.5; }
+.open { margin-top: 14px; min-height: 36px; padding: 0 14px; border: 0; border-radius: 6px; background: var(--ink); color: #fff; font: 600 13px var(--sans); cursor: pointer; }
+.bench { display: none; margin-top: 16px; }
+.is-open .bench { display: block; }
+.bench label { display: flex; justify-content: space-between; font: 500 12px var(--mono); color: var(--muted); }
+.bench input { width: 100%; margin: 8px 0 0; accent-color: var(--accent); }
+.bench-out { margin: 10px 0 0; font-weight: 700; font-size: 28px; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+
+.cursor { position: absolute; z-index: 300; left: 0; top: 0; width: 18px; height: 18px; pointer-events: none; opacity: 0; filter: drop-shadow(0 2px 3px rgb(0 0 0 / .3)); }
+
+@media (max-width: 759px) {
+    .stage { min-height: 0; }
+    .cards { display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; margin-inline: -16px; padding-inline: 16px; }
+    .cards > li { flex: 0 0 72%; scroll-snap-align: center; }
+    .card::before { transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .thumb *, .headline.swap, .caption-body.swap { animation: none !important; }
+    .packet { display: none !important; }
+}
+</style>
+</head>
+<body>
+<main class="stage" id="stage">
+    <div class="bar">
+        <p>12 modules</p>
+        <div class="views" role="group" aria-label="Arrangement" hidden id="views">
+            <button type="button" data-view="drawer">Drawer</button>
+            <button type="button" data-view="thread">Thread</button>
+            <button type="button" data-view="board">Board</button>
+        </div>
+    </div>
+    <h2 class="headline" id="headline">Pull out the part you need.</h2>
+    <span class="packet" id="packet" aria-hidden="true"></span>
+    <ul class="cards" id="cards"></ul>
+    <span class="leader" id="leader" aria-hidden="true"></span>
+    <span class="leader-dot" id="leader-dot" aria-hidden="true"></span>
+    <aside class="caption" id="caption" aria-live="polite">
+        <p class="caption-top" id="c-count"></p>
+        <div class="caption-body" id="c-body">
+            <h3 id="c-name"></h3>
+            <p class="caption-text" id="c-text"></p>
+        </div>
+        <div class="bench" id="bench">
+            <label for="volume">Orders a day <output id="volume-out">120</output></label>
+            <input id="volume" type="range" min="10" max="400" step="5" value="120">
+            <p class="bench-out" id="bench-out"></p>
+        </div>
+        <button class="open" id="open" type="button">Try it</button>
+    </aside>
+    <svg class="cursor" id="cursor" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 1l13 7-6 1.6L6.4 16z" fill="#111" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg>
+</main>
+<script>
+const ITEMS = [
+    ['Orders', 'Sell', 'New orders land in one list, whatever the channel.', 'rows'],
+    ['Payments', 'Sell', 'Every payment matched to its order.', 'line'],
+    ['Stock', 'Sell', 'Counts stay right on every channel.', 'bars'],
+    ['Customers', 'Grow', 'One record for each customer and their history.', 'ticks'],
+    ['Campaigns', 'Grow', 'Send it, then see what it brought in.', 'line'],
+    ['Reports', 'Grow', 'The numbers you check every morning.', 'bars'],
+    ['Invoices', 'Run', 'Issued and filed from the order itself.', 'rows'],
+    ['Shipping', 'Run', 'Labels printed, tracking sent.', 'ticks'],
+    ['Bookings', 'Run', 'A calendar that fills itself.', 'ticks'],
+    ['Messages', 'Run', 'Every conversation in one inbox.', 'rows'],
+    ['Team', 'Run', 'Who can do what, and who did.', 'ticks'],
+    ['Automations', 'Run', 'The steps nobody should repeat by hand.', 'line'],
+];
+const HEADLINES = { drawer: 'Pull out the part you need.', thread: 'Each step hands over to the next.', board: 'All of it, side by side.', open: 'Change a number, watch it change.' };
+const TAB_STEP = { Sell: 0, Grow: 76, Run: 150 };
+
+const $ = (id) => document.getElementById(id);
+const root = $('stage'), list = $('cards');
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const mix = (a, b, t) => a + (b - a) * t;
+const reduced = matchMedia('(prefers-reduced-motion: reduce)');
+const wide = matchMedia('(min-width: 760px)');
+
+/* Thumbnails show what the thing does. Replace these with small pieces of the real product. */
+function thumb(kind, i) {
+    const ink = 'var(--ink)', accent = 'var(--accent)', soft = 'var(--line)';
+    const body = {
+        bars: [24, 54, 84, 114, 144].map((x, k) => `<rect class="t-bar" style="animation-delay:${k * -.3}s" x="${x}" y="${34 + ((k + i) * 37) % 50}" width="20" height="${86 - ((k + i) * 37) % 50}" rx="2" fill="${k === 3 ? accent : soft}"/>`).join(''),
+        line: `<path d="M14 104 C44 102 48 54 80 60 S120 96 138 62 158 30 176 26" fill="none" stroke="${soft}" stroke-width="2"/><path class="t-draw" pathLength="1" d="M14 104 C44 102 48 54 80 60 S120 96 138 62 158 30 176 26" fill="none" stroke="${ink}" stroke-width="3" stroke-linecap="round"/>`,
+        rows: [0, 1, 2, 3].map((k) => `<g class="${k === 0 ? 't-row' : ''}"><rect x="16" y="${16 + k * 28}" width="158" height="22" rx="3" fill="#fff"/><rect x="24" y="${24 + k * 28}" width="${74 - k * 8}" height="6" rx="1" fill="${k === 0 ? accent : soft}"/><rect x="146" y="${24 + k * 28}" width="20" height="6" rx="1" fill="${soft}"/></g>`).join(''),
+        ticks: Array.from({ length: 28 }, (_, k) => `<rect class="${(k + i) % 9 === 0 ? 't-tick' : ''}" style="animation-delay:${k * -.2}s" x="${22 + (k % 7) * 22}" y="${18 + Math.floor(k / 7) * 24}" width="16" height="16" rx="2" fill="${(k * 5 + i) % 4 === 0 ? ink : soft}"/>`).join(''),
+    }[kind];
+    return `<svg viewBox="0 0 190 148" aria-hidden="true">${body}</svg>`;
+}
+
+/* The open view runs on the visitor's own number: one control, one real result, no preset. */
+function benchChart(perDay) {
+    const bars = Array.from({ length: 14 }, (_, k) => {
+        const v = perDay * (.7 + .3 * Math.abs(Math.sin(k * 1.7)));
+        const h = clamp(v / 400, .04, 1) * 112;
+        return `<rect x="${12 + k * 12}" y="${132 - h}" width="8" height="${h}" rx="1" fill="${k === 13 ? 'var(--accent)' : 'var(--ink)'}"/>`;
+    }).join('');
+    return `<svg viewBox="0 0 190 148" aria-hidden="true">${bars}</svg>`;
+}
+
+const nodes = ITEMS.map(([name, group], i) => {
+    const li = document.createElement('li');
+    li.innerHTML = `<button class="card" type="button" data-tab="${group}" style="--tab:${TAB_STEP[group]}px"><span class="card-name">${name}<small>${String(i + 1).padStart(2, '0')}</small></span><span class="thumb">${thumb(ITEMS[i][3], i)}</span></button>`;
+    list.append(li);
+    return { li, card: li.firstChild, thumb: li.querySelector('.thumb'), original: li.querySelector('.thumb').innerHTML, now: null, vel: {}, goal: null, wait: 0 };
+});
+
+/*
+ * Each arrangement is a pure function: index, focus (may be fractional) and stage size give a pose. Nothing else knows
+ * how an arrangement looks, so any arrangement can turn into any other, also halfway through a move.
+ */
+const ARRANGE = {
+    // A card drawer seen from the front: the cards behind show their tabs, the cards in front stand lower and cover the rest.
+    drawer(i, f, w, h) {
+        const d = i - f, n = Math.abs(d), t = Math.min(n, 1), ax = w * .17;
+        const lift = { y: -h * .13, z: 50, rx: 0, s: 1.16 };
+        const rest = d > 0
+            ? { y: -h * .2 - d * 46, z: -30 - d * 60, rx: -10, s: 1 }
+            : { y: h * .19 + (n - 1) * 62, z: 40 + n * 22, rx: -14, s: 1.03 }; // the step clears a tab and a name
+        return { x: ax, y: mix(lift.y, rest.y, t), z: mix(lift.z, rest.z, t), rx: mix(lift.rx, rest.rx, t), rz: 0, s: mix(lift.s, rest.s, t), o: d > 0 ? clamp(2.2 - d * .4, 0, 1) : 1 };
+    },
+    // Cards hang along one line, which is drawn behind them and carries a moving mark from step to step.
+    thread(i, f, w, h) {
+        const d = i - f, near = Math.min(Math.abs(d), 1), x = d * 264 + w * .02;
+        return { x, y: Math.sin(i * .85) * h * .07 + h * .1, z: 0, rx: 0, rz: Math.cos(i * .85) * 4 * near, s: 1.1 - .1 * near, o: clamp((w * .62 - Math.abs(x)) / 120, 0, 1) };
+    },
+    board(i, _f, w, h) {
+        const cols = w > 1080 ? 6 : 4, rows = Math.ceil(ITEMS.length / cols), gap = 14, drop = 18;
+        const col = i % cols, room = h * .68;
+        const cell = Math.min((w * .94 - gap * (cols - 1)) / cols, ((room - drop - gap * (rows - 1)) / rows) * (240 / 270));
+        const s = cell / 240, stepY = 270 * s + gap + 12;
+        return { x: (col - (cols - 1) / 2) * (cell + gap), y: (Math.floor(i / cols) - (rows - 1) / 2) * stepY + (col % 2) * drop + h * .08, z: 0, rx: 0, rz: 0, s, o: 1 };
+    },
+    open(i, f, w, h) {
+        const d = i - Math.round(f);
+        if (d === 0) return { x: w * .1, y: -h * .03, z: 0, rx: 0, rz: 0, s: clamp(Math.min(w * .42 / 240, h * .6 / 270), 1, 2.4), o: 1 };
+        return { x: w * .1 + d * 12, y: h * .62, z: 0, rx: -14, rz: 0, s: 1, o: 0 };
+    },
+};
+
+let view = 'drawer', focus = 0, goalFocus = 0, opened = false, live = false, frame = 0, last = 0, shown = -1;
+const STIFF = 130, DAMP = 2 * Math.sqrt(STIFF); // critically damped: arrives without overshoot, and any move can be interrupted
+const PROPS = ['x', 'y', 'z', 'rx', 'rz', 's', 'o'];
+
+function paint(n, d) {
+    const p = n.now;
+    n.li.style.transform = `translate3d(${p.x.toFixed(1)}px,${p.y.toFixed(1)}px,${p.z.toFixed(1)}px) rotateX(${p.rx.toFixed(2)}deg) rotateZ(${p.rz.toFixed(2)}deg) scale(${p.s.toFixed(3)})`;
+    n.li.style.opacity = p.o.toFixed(3);
+    n.li.style.zIndex = Math.round(100 - d * 4);
+    n.li.style.visibility = opened && p.o < .01 ? 'hidden' : 'visible'; // far cards stay focusable while faded
+    n.card.style.pointerEvents = p.o < .05 ? 'none' : '';
+}
+
+function setLine(el, x1, y1, x2, y2) {
+    el.style.transform = `translate3d(${x1.toFixed(1)}px,${y1.toFixed(1)}px,0) rotate(${Math.atan2(y2 - y1, x2 - x1).toFixed(4)}rad) scaleX(${Math.hypot(x2 - x1, y2 - y1).toFixed(1)})`;
+}
+
+const segments = ITEMS.slice(1).map(() => {
+    const el = document.createElement('span');
+    el.className = 'wire-seg';
+    el.setAttribute('aria-hidden', 'true');
+    root.append(el);
+    return el;
+});
+
+function drawWires(w, h) {
+    if (view !== 'thread' || opened) return;
+    const pts = nodes.map((n) => [w / 2 + n.now.x, h * .56 + n.now.y]);
+    segments.forEach((el, i) => setLine(el, pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1]));
+    $('packet').style.offsetPath = `path("M${pts.map((p) => `${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(' L')}")`;
+}
+
+/* The caption stays still and a thin line ties it to the card in focus, so the moving card always has its words. */
+function drawLeader() {
+    const card = nodes[clamp(shown, 0, nodes.length - 1)].card.getBoundingClientRect();
+    const box = $('caption').getBoundingClientRect(), r = root.getBoundingClientRect();
+    const inThread = view === 'thread' && !opened;
+    const from = inThread ? [box.left - r.left + 24, box.bottom - r.top + 6] : [box.right - r.left + 10, box.top - r.top + 12];
+    const to = inThread ? [card.left - r.left + card.width * .7, card.top - r.top] : [card.left - r.left, card.top - r.top + card.height * .22];
+    setLine($('leader'), from[0], from[1], to[0], to[1]);
+    $('leader-dot').style.transform = `translate3d(${to[0].toFixed(1)}px,${to[1].toFixed(1)}px,0)`;
+}
+
+function tick(time) {
+    frame = 0;
+    const dt = Math.min(.034, (time - last) / 1000 || .016);
+    last = time;
+    const snap = reduced.matches;
+    let moving = false;
+    const fv = goalFocus - focus;
+    focus = snap || Math.abs(fv) < .001 ? goalFocus : focus + fv * Math.min(1, dt * 7);
+    if (focus !== goalFocus) moving = true;
+    const w = root.clientWidth, h = root.clientHeight;
+    nodes.forEach((n, i) => {
+        n.goal = ARRANGE[opened ? 'open' : view](i, focus, w, h);
+        if (!n.now || snap) {
+            n.now = { ...n.goal };
+            paint(n, i - focus);
+            return;
+        }
+        if (n.wait > 0) {
+            n.wait -= dt * 1000;
+            moving = true;
+            return;
+        }
+        PROPS.forEach((k) => {
+            const v = n.vel[k] || 0;
+            const a = STIFF * (n.goal[k] - n.now[k]) - DAMP * v;
+            n.vel[k] = v + a * dt;
+            n.now[k] += n.vel[k] * dt;
+            if (Math.abs(n.goal[k] - n.now[k]) > .002 || Math.abs(n.vel[k]) > .002) moving = true;
+            else { n.now[k] = n.goal[k]; n.vel[k] = 0; }
+        });
+        paint(n, i - focus);
+    });
+    syncFocus();
+    drawWires(w, h);
+    drawLeader();
+    if (moving) wake();
+}
+function wake() {
+    if (!frame && live) frame = requestAnimationFrame(tick); // no frames at all while nothing moves
+}
+
+function syncFocus() {
+    const i = clamp(Math.round(goalFocus), 0, ITEMS.length - 1);
+    if (i === shown) return;
+    shown = i;
+    nodes.forEach((n, k) => {
+        n.card.classList.toggle('is-focus', k === i);
+        k === i ? n.card.setAttribute('aria-current', 'true') : n.card.removeAttribute('aria-current');
+    });
+    const [name, , text] = ITEMS[i];
+    $('c-count').textContent = `${String(i + 1).padStart(2, '0')} of ${ITEMS.length}`;
+    $('c-name').textContent = name;
+    $('c-text').textContent = text;
+    restart($('c-body'));
+}
+function setHeadline() {
+    const text = HEADLINES[opened ? 'open' : view], el = $('headline');
+    if (el.textContent === text) return;
+    el.textContent = text;
+    restart(el);
+}
+function restart(el) {
+    el.classList.remove('swap');
+    void el.offsetWidth;
+    el.classList.add('swap');
+}
+
+function setView(next) {
+    if (opened) setOpen(false);
+    view = next;
+    ['drawer', 'thread', 'board'].forEach((v) => root.classList.toggle(`in-${v}`, v === next));
+    document.querySelectorAll('[data-view]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.view === next)));
+    // Cards nearest the focus leave first, so a change of arrangement reads as a wave rather than a jump.
+    if (!reduced.matches) nodes.forEach((n, i) => { n.wait = Math.abs(i - goalFocus) * 16; });
+    setHeadline();
+    wake();
+}
+function setFocus(v) {
+    goalFocus = clamp(v, 0, ITEMS.length - 1);
+    wake();
+}
+function drawBench() {
+    const perDay = +$('volume').value;
+    $('volume-out').textContent = perDay;
+    $('bench-out').textContent = `${(perDay * 30).toLocaleString('en-US')} a month`;
+    if (opened) nodes[shown].thumb.innerHTML = benchChart(perDay);
+}
+function setOpen(on) {
+    if (on === opened) return;
+    opened = on;
+    root.classList.toggle('is-open', on);
+    $('open').textContent = on ? 'Close' : 'Try it';
+    if (on) { setFocus(Math.round(goalFocus)); syncFocus(); drawBench(); }
+    else nodes.forEach((n) => { n.thumb.innerHTML = n.original; });
+    setHeadline();
+    wake();
+}
+
+/*
+ * The stage maps the pointer to an index: height in the drawer, width on the thread. Testing which card is under the
+ * pointer does not work here: the focused card moves, a different card lands under the pointer, and the set runs away
+ * from the hand. Browsers also repeat the event when something moves under a resting pointer; those repeats are ignored
+ * so they cannot take focus from the keyboard.
+ */
+const tour = { running: false };
+let pointerAt = null;
+function pointerFocus(e) {
+    if (!live || opened || view === 'board' || e.pointerType === 'touch' || tour.running) return;
+    const key = `${e.clientX},${e.clientY}`;
+    if (key === pointerAt) return;
+    pointerAt = key;
+    const r = root.getBoundingClientRect();
+    const p = view === 'drawer'
+        ? clamp((r.bottom - e.clientY - r.height * .1) / (r.height * .72), 0, 1)
+        : clamp((e.clientX - r.left - r.width * .05) / (r.width * .9), 0, 1);
+    setFocus(p * (ITEMS.length - 1));
+}
+root.addEventListener('pointermove', pointerFocus);
+nodes.forEach((n, i) => {
+    n.card.addEventListener('pointerenter', () => { if (live && view === 'board' && !opened) setFocus(i); });
+    n.card.addEventListener('focus', () => { if (live && !opened) setFocus(i); });
+    n.card.addEventListener('click', () => {
+        if (!live) return;
+        if (opened) return setOpen(false);
+        setFocus(i);
+        setOpen(true);
+    });
+});
+document.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', () => setView(b.dataset.view)));
+$('open').addEventListener('click', () => setOpen(!opened));
+$('volume').addEventListener('input', drawBench);
+root.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') setOpen(false);
+    if (e.target.tagName === 'INPUT' || !live || opened) return;
+    const step = { ArrowRight: 1, ArrowUp: 1, ArrowLeft: -1, ArrowDown: -1 }[e.key];
+    if (step) {
+        e.preventDefault();
+        nodes[clamp(shown + step, 0, ITEMS.length - 1)].card.focus({ preventScroll: true });
+    }
+});
+addEventListener('resize', wake);
+
+function setMode() {
+    live = wide.matches;
+    root.classList.toggle('is-live', live);
+    $('views').hidden = !live;
+    nodes.forEach((n) => {
+        if (!live) n.li.removeAttribute('style');
+        n.now = null;
+    });
+    if (live) { shown = -1; wake(); }
+}
+wide.addEventListener('change', setMode);
+setMode();
+setView('drawer');
+syncFocus();
+
+/*
+ * Guide cursor: shows what the stage can do, only until a real pointer arrives. It changes no data, never runs on
+ * phones or under reduced motion, and starts only when asked (#tour here, an idle timer on a real page).
+ */
+const wait = (ms) => new Promise((done) => setTimeout(done, ms));
+function tween(ms, step) {
+    return new Promise((done) => {
+        const start = performance.now();
+        const run = (t) => {
+            if (!tour.running) return done();
+            const p = clamp((t - start) / ms, 0, 1);
+            step(p < .5 ? 2 * p * p : 1 - (-2 * p + 2) ** 2 / 2);
+            p < 1 ? requestAnimationFrame(run) : done();
+        };
+        requestAnimationFrame(run);
+    });
+}
+async function runTour() {
+    const c = $('cursor'), W = root.clientWidth, H = root.clientHeight;
+    let at = [W * .84, H * .8];
+    const place = ([x, y]) => { at = [x, y]; c.style.transform = `translate3d(${x}px,${y}px,0)`; };
+    const to = (x, y, ms) => { const from = at; return tween(ms, (p) => place([mix(from[0], x, p), mix(from[1], y, p)])); };
+    const pick = async (v) => { const b = document.querySelector(`[data-view="${v}"]`).getBoundingClientRect(), r = root.getBoundingClientRect(); await to(b.left - r.left + 20, b.top - r.top + 14, 450); setView(v); };
+    tour.running = true;
+    place(at);
+    c.style.opacity = 1;
+    await tween(3200, (p) => { setFocus(mix(0, 5, p)); place([W * .84, mix(H * .8, H * .32, p)]); });
+    await pick('thread');
+    await to(W * .3, H * .7, 500);
+    await tween(3200, (p) => { setFocus(mix(5, 8, p)); place([mix(W * .3, W * .78, p), H * .7]); });
+    await to(W * .6, H * .62, 300);
+    if (tour.running) setOpen(true);
+    await wait(800);
+    const s = $('volume').getBoundingClientRect(), r = root.getBoundingClientRect(), left = s.left - r.left, top = s.top - r.top + 6;
+    await to(left + s.width * .28, top, 400);
+    await tween(1800, (p) => { $('volume').value = mix(120, 380, p); drawBench(); place([left + s.width * mix(.28, .95, p), top]); });
+    await wait(500);
+    if (tour.running) setOpen(false);
+    await pick('board');
+    await wait(1800);
+    c.style.opacity = 0;
+    tour.running = false;
+}
+if (location.hash === '#tour' && live && !reduced.matches) {
+    // A pointer resting on the page also fires once at load, so only real travel ends the tour.
+    let seen = null;
+    const stop = (e) => {
+        if (!e.isTrusted) return;
+        seen ??= [e.clientX, e.clientY];
+        if (Math.hypot(e.clientX - seen[0], e.clientY - seen[1]) < 4) return;
+        tour.running = false;
+        $('cursor').style.opacity = 0;
+        removeEventListener('pointermove', stop);
+    };
+    addEventListener('pointermove', stop);
+    runTour();
+}
+</script>
+</body>
+</html>

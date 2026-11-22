@@ -21,7 +21,7 @@ export function MonthNavigator() {
     <div className="grid grid-cols-[2.75rem_minmax(0,1fr)_2.75rem_auto] items-end gap-1.5 min-[360px]:gap-2">
       <button type="button" aria-label="前の月" disabled={busy} className="size-11 rounded-full border border-border bg-surface" onClick={() => void change(shiftMonth(month, -1))}>‹</button>
       <div className="min-w-0">
-        <label htmlFor={inputId} className="block text-[10px] text-muted">対象月</label>
+        <label htmlFor={inputId} className="block text-xs text-muted">対象月</label>
         {/* 標準の月入力が固有の最小幅を持つ端末でも、表示を矢印の領域へはみ出させない。 */}
         <div className="h-11 overflow-hidden rounded-xl border border-border bg-surface focus-within:ring-2 focus-within:ring-accent">
           <input id={inputId} aria-label="対象月" type="month" value={month} disabled={busy}

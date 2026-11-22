@@ -86,7 +86,7 @@ button:focus-visible, [role='button']:focus-visible { outline: 2px solid var(--a
   left: 16px;
   right: 88px;
   border: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
-  border-radius: 28px;
+  border-radius: 9999px;
   background: color-mix(in srgb, var(--surface) 92%, transparent);
   backdrop-filter: blur(20px);
   box-shadow: 0 5px 26px #2823330a;

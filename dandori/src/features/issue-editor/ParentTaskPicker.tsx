@@ -44,7 +44,7 @@ export function ParentTaskPicker({ options, value, selectedParent, statuses, dis
       className={`flex min-h-11 list-none items-center gap-2 p-3 [&::-webkit-details-marker]:hidden ${disabled ? 'cursor-default opacity-40' : 'cursor-pointer'}`}>
       <span className="min-w-0 flex-1 text-sm text-text">
         <span className="block break-words font-medium">{parent ? `${formatIssueNumber(parent.number)} · ${parent.title}` : value ? '選択中の親タスクを表示できません' : '親タスクなし'}</span>
-        {parent && <span className="mt-1 block text-[11px] text-muted">{description(parent)}</span>}
+        {parent && <span className="mt-1 block text-xs text-muted">{description(parent)}</span>}
       </span>
       <span aria-hidden className="shrink-0 text-xs text-accent">{value ? '変更' : '選択'} ▾</span>
     </summary>
@@ -62,7 +62,7 @@ export function ParentTaskPicker({ options, value, selectedParent, statuses, dis
         <button type="button" disabled={!query} className="min-h-11 shrink-0 rounded-lg border border-border px-3 text-xs disabled:opacity-40"
           onClick={() => { setQuery(''); setLimit(PAGE_SIZE); searchRef.current?.focus() }}>クリア</button>
       </div>
-      <p id={`${id}-hint`} className="text-[11px] text-muted">候補を選んでください。検索中のEnterではタスクを保存しません。</p>
+      <p id={`${id}-hint`} className="text-xs text-muted">候補を選んでください。検索中のEnterではタスクを保存しません。</p>
       <p role="status" className="text-xs text-muted">候補 {results.length}件 · {Math.min(limit, results.length)}件表示{!query && '（更新が新しい順）'}</p>
       <ul aria-label="親タスクの検索結果" className="max-h-64 min-w-0 overflow-y-auto rounded-lg border border-border bg-surface">
         {results.slice(0, limit).map(issue => <li key={issue.id} className="border-b border-border last:border-b-0">
@@ -70,7 +70,7 @@ export function ParentTaskPicker({ options, value, selectedParent, statuses, dis
             className={`min-h-11 w-full p-3 text-left text-text ${issue.id === value ? 'bg-accent/10' : 'hover:bg-surface-2'}`}
             onClick={() => { onChange(issue.id); setQuery(''); setLimit(PAGE_SIZE); close() }}>
             <span className="block break-words text-sm">{issue.id === value && '✓ '}{formatIssueNumber(issue.number)} · {issue.title}</span>
-            <span className="mt-1 block text-[11px] text-muted">{description(issue)}</span>
+            <span className="mt-1 block text-xs text-muted">{description(issue)}</span>
           </button>
         </li>)}
         {results.length === 0 && <li className="p-3 text-sm text-muted">{options.length ? '条件に合う親タスクがありません。検索語を変えてください。' : '選べる親タスクがありません。親にしたいタスクを先に作成してください。'}</li>}

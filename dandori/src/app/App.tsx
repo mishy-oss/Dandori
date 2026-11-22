@@ -92,7 +92,7 @@ export function App() {
             key={t.id}
             aria-current={tab === t.id ? 'page' : undefined}
             onClick={() => setTab(t.id)}
-            className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-full text-[10px] ${
+            className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-full text-xs ${
               tab === t.id ? 'font-semibold text-accent' : 'text-text'
             }`}
           >
