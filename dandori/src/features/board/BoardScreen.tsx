@@ -143,7 +143,7 @@ export function BoardScreen() {
       <details className="rounded-2xl border border-border bg-surface">
         <summary className="cursor-pointer p-3 text-xs font-medium">月次バーンダウンを見る</summary>
         <MonthlyBurndown />
-        <p className="px-4 pb-4 text-[11px] text-muted">対象月の集計です。検索・絞り込み・全月表示は反映しません。親タスク・epic・持ち越し済みの履歴を除いて数えます。</p>
+        <p className="px-4 pb-4 text-xs text-muted">対象月の集計です。検索・絞り込み・全月表示は反映しません。親タスク・epic・持ち越し済みの履歴を除いて数えます。</p>
       </details>
 
       <div role="search" className="flex min-w-0 flex-col gap-2">
@@ -193,8 +193,8 @@ export function BoardScreen() {
         <p>{active.name}：{column.length}件表示 / 全ステータス：{groups.length}件</p>
         <p>繰り返し各回を含む{taskCount}タスク · {allMonths ? 'すべての月' : month}{isFilterActive(filter) ? ' · 絞り込み中' : ''}</p>
       </div>
-      <p className="text-[11px] text-muted">各列の件数はカード数です。繰り返しは月ごとに1枚へまとめ、次の未完了のステータスに表示します。</p>
-      {allMonths && <p className="text-[11px] text-muted">全月表示でも横スワイプでステータスを変更できます。並べ替えは対象月表示で行えます。</p>}
+      <p className="text-xs text-muted">各列の件数はカード数です。繰り返しは月ごとに1枚へまとめ、次の未完了のステータスに表示します。</p>
+      {allMonths && <p className="text-xs text-muted">全月表示でも横スワイプでステータスを変更できます。並べ替えは対象月表示で行えます。</p>}
 
       {wip.over && (
         <p role="status" className="rounded-lg border border-amber-500 bg-amber-500/10 p-3 text-sm">
@@ -234,7 +234,7 @@ export function BoardScreen() {
           const issue = group.issue
           if (group.recurring) {
             return <li key={group.key}>
-              {allMonths && <span className="mb-1 block text-[11px] text-muted">対象月：{issueMonth(issue)}</span>}
+              {allMonths && <span className="mb-1 block text-xs text-muted">対象月：{issueMonth(issue)}</span>}
               <RecurringBoardCard
                 group={group}
                 relatedIssues={allIssues}
@@ -253,7 +253,7 @@ export function BoardScreen() {
           const swipeHere = swipe?.issueId === issue.id ? swipe : null
           return (
             <li key={group.key}>
-              {allMonths && <span className="mb-1 block text-[11px] text-muted">対象月：{issueMonth(issue)}</span>}
+              {allMonths && <span className="mb-1 block text-xs text-muted">対象月：{issueMonth(issue)}</span>}
               <BoardCard
                 issue={issue}
                 relatedIssues={allIssues}

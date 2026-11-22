@@ -131,7 +131,7 @@ export function TimelineScreen() {
   return (
     <div ref={rootRef} onPointerDown={onPointerDown} className="flex h-full min-h-0 flex-col pt-6">
       <div className="flex shrink-0 items-center gap-2 px-6 pb-2">
-        <h1 className="flex-1 text-[25px] font-semibold tracking-[-0.04em]">
+        <h1 className="flex-1 text-2xl font-semibold tracking-[-0.04em]">
           <span className="mr-2 font-medium text-accent">{format(parseISO(selected), 'yyyy年')}</span>{title}
         </h1>
         <DateJumpButton aria-label="今日へジャンプ" title="今日の現在時刻へ移動" onClick={jumpToToday}>

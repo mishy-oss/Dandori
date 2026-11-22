@@ -78,7 +78,7 @@ export function BoardCard({
         <TaskRelations issue={issue} issues={relatedIssues} doneIds={doneIds} />
       </div>
       {onMove && <button type="button" data-no-drag aria-label={`${issue.title}の対象月を変更`}
-        className="min-h-11 shrink-0 rounded-lg border border-border px-2 text-[11px] text-muted"
+        className="min-h-11 shrink-0 rounded-lg border border-border px-2 text-xs text-muted"
         onClick={(event) => { event.stopPropagation(); onMove() }}>対象月</button>}
     </div>
   )

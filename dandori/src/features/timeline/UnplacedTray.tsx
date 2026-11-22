@@ -18,12 +18,12 @@ export function UnplacedTray({
 
   return (
     <section aria-label="未配置のIssue" className="flex shrink-0 flex-col gap-3 px-5 pb-4 pt-5">
-      <h2 className="flex items-center justify-between text-[10px] font-medium tracking-wide text-muted">
+      <h2 className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs font-medium text-muted">
         あとで予定する{issues.length > 0 ? ` · ${issues.length}` : ''}
         {issues.length > 0 && <span className="font-normal">長押しでタイムラインへ</span>}
       </h2>
       {issues.length === 0 ? (
-        <p className="pb-1 text-[11px] text-muted">
+        <p className="pb-1 text-xs text-muted">
           この月の未配置タスクはありません
         </p>
       ) : (
@@ -49,7 +49,7 @@ export function UnplacedTray({
                 }`}
               >
                 <span aria-hidden className="flex size-12 shrink-0 items-center justify-center rounded-full text-white" style={{ background: taskAppearance(i).color }}><Icon name={taskAppearance(i).icon} className="size-6" /></span>
-                <span className="line-clamp-2 text-[11px] font-medium leading-snug">{i.title}</span>
+                <span className="line-clamp-2 text-xs font-medium leading-snug">{i.title}</span>
               </div>
             </li>
           ))}

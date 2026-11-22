@@ -35,3 +35,5 @@ jobs:
       - run: npm test
       - run: npm run test:google-worker
       - run: npm run build
+      - name: Check UI design
+        run: npx --yes @enmera/ai-design-check@0.16.3 src --format github
