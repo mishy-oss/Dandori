@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { db, DandoriDB } from '../../db/db'
 import { useDataStore } from '../../store/data'
 import { readActiveAccount, selectAccount, type AccountIdentity } from './accountIdentity'
-import { acceptSyncedData, initializeAccountDatabase, readSyncData, saveLocalImport } from './accountRepo'
+import { acceptSyncedData, initializeAccountDatabase, readAccountSyncSnapshot, readSyncData, RESTORE_PENDING_MESSAGE, saveLocalImport, StatusSyncConflictError } from './accountRepo'
 import { importGuestData, initialSyncData, isSyncData, mergeSyncData, sameValue, type ConflictChoice, type SyncDocument } from './syncModel'
 
 export interface CalendarSelection { id: string; name: string; timeZone: string }
@@ -15,11 +15,12 @@ interface AccountState {
   calendarError: string | null
   message: string | null
   conflicts: string[]
+  restorePending: boolean
   calendar: CalendarSelection | null
   calendars: CalendarSelection[]
   lastSyncedAt: number
 }
-export const useAccountStore = create<AccountState>(() => ({ user: readActiveAccount(), enabled: null, authenticated: false, busy: false, error: null, calendarError: null, message: null, conflicts: [], calendar: null, calendars: [], lastSyncedAt: 0 }))
+export const useAccountStore = create<AccountState>(() => ({ user: readActiveAccount(), enabled: null, authenticated: false, busy: false, error: null, calendarError: null, message: null, conflicts: [], restorePending: false, calendar: null, calendars: [], lastSyncedAt: 0 }))
 export class AccountApiError extends Error {
   status: number
   constructor(message: string, status: number) { super(message); this.status = status }
@@ -77,7 +78,7 @@ export function initializeAccount(): Promise<void> {
   return boot ??= (async () => {
     if (readActiveAccount()) await initializeAccountDatabase()
     const metadata = await db.accountSync.get('main')
-    useAccountStore.setState({ lastSyncedAt: metadata?.lastSyncedAt ?? 0 })
+    useAccountStore.setState({ lastSyncedAt: metadata?.lastSyncedAt ?? 0, restorePending: !!metadata?.pendingRestore })
     const outcome = new URLSearchParams(location.search).get('google')
     if (outcome) {
       const messages: Record<string,string> = { cancelled: 'Google連携をキャンセルしました', invalid_state: '認証の確認に失敗しました。もう一度ログインしてください', expired: '認証の時間が切れました', not_allowed: '許可されたGoogleアカウントでログインしてください', missing_scope: 'カレンダーへのアクセスを許可して再連携してください', failed: 'Googleの認証に失敗しました' }
@@ -103,25 +104,47 @@ export async function syncAccount(choice?: ConflictChoice): Promise<boolean> {
   useAccountStore.setState({ busy: true, error: null })
   try {
     for (let attempt = 0; attempt < 3; attempt++) {
-      const captured = await readSyncData()
-      const base = (await db.accountSync.get('main'))?.baseline ?? initialSyncData(0)
+      const { metadata, data: captured } = await readAccountSyncSnapshot()
+      if (blockSyncForRestore(!!metadata?.pendingRestore)) return false
+      const base = metadata?.baseline ?? initialSyncData(0)
       const remote = await accountApi<SyncDocument>('/api/account/sync')
+      const latestMetadata = await db.accountSync.get('main')
+      if (blockSyncForRestore(!!latestMetadata?.pendingRestore)) return false
+      if (latestMetadata?.revision !== metadata?.revision) continue
       if (!isSyncData(remote.data)) throw new Error('クラウドデータの形式を確認できませんでした')
       const merged = mergeSyncData(base, captured, remote.data, choice)
-      if (merged.conflicts.length && !choice) { useAccountStore.setState({ conflicts: merged.conflicts, error: '同じデータが複数の端末で変更されています。優先する内容を選択してください。' }); return false }
+      if (merged.conflicts.length && !choice) {
+        const error = merged.statusConflicts.length
+          ? 'タスクが参照するステータスに競合が発生しました。優先する内容を選択してください。削除を優先すると、該当タスクは別のステータスに移ります。'
+          : '同じデータが複数の端末で変更されています。優先する内容を選択してください。'
+        useAccountStore.setState({ conflicts: merged.conflicts, error })
+        return false
+      }
+      if (!isSyncData(merged.data)) throw new Error('統合した同期データが不正です。ワークフローやタスクの設定を確認してください。')
       let result = remote
       if (!sameValue(merged.data, remote.data)) {
         try { result = await accountApi<SyncDocument>('/api/account/sync', { method: 'PUT', body: JSON.stringify({ revision: remote.revision, data: merged.data }) }) }
         catch (error) { if (error instanceof AccountApiError && error.status === 409) continue; throw error }
       }
-      await acceptSyncedData(captured, result)
+      await acceptSyncedData(captured, result, metadata?.revision ?? null)
       if (!sameValue(captured, result.data)) await useDataStore.getState().refreshPlanning()
       useAccountStore.setState({ conflicts: [], lastSyncedAt: Date.now(), message: 'タスクを同期しました' })
       return true
     }
     throw new Error('別の端末で更新が続いています。少し待って再同期してください')
-  } catch (error) { useAccountStore.setState({ error: error instanceof Error ? error.message : String(error) }); return false }
+  } catch (error) {
+    useAccountStore.setState({
+      ...(error instanceof StatusSyncConflictError && { conflicts: error.conflicts }),
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return false
+  }
   finally { useAccountStore.setState({ busy: false }) }
+}
+function blockSyncForRestore(pending: boolean): boolean {
+  if (pending) useAccountStore.setState({ restorePending: true, error: RESTORE_PENDING_MESSAGE })
+  else if (useAccountStore.getState().restorePending) useAccountStore.setState({ restorePending: false })
+  return pending
 }
 export async function runAccountAction(action: () => Promise<void>): Promise<void> {
   if (useAccountStore.getState().busy) return

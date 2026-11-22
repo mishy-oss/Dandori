@@ -1,7 +1,7 @@
 import Dexie, { type EntityTable } from 'dexie'
 import { newId } from '../lib/id'
 import { activeDatabaseName } from '../features/account/accountIdentity'
-import type { SyncData } from '../features/account/syncModel'
+import type { PendingAccountRestore, SyncData } from '../features/account/syncModel'
 import type { Issue, Project, RecurrenceRule, Settings, Sprint, Workflow, MonthlySnapshot } from './types'
 
 export class DandoriDB extends Dexie {
@@ -12,7 +12,7 @@ export class DandoriDB extends Dexie {
   sprints!: EntityTable<Sprint, 'id'>
   settings!: EntityTable<Settings, 'id'>
   monthlySnapshots!: EntityTable<MonthlySnapshot, 'id'>
-  accountSync!: EntityTable<{ id: string; revision: number; baseline: SyncData; lastSyncedAt: number }, 'id'>
+  accountSync!: EntityTable<{ id: string; revision: number; baseline: SyncData; lastSyncedAt: number; pendingRestore?: PendingAccountRestore }, 'id'>
 
   constructor(name = 'dandori') {
     super(name)

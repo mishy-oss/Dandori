@@ -3,7 +3,7 @@ import { MAX_BACKUP_BYTES, parseBackup, type BackupFile } from '../../db/backupI
 import { useThemeStore } from '../../store/theme'
 import { useAccountStore } from '../account/accountStore'
 import { sameValue } from '../account/syncModel'
-import { prepareBackupRestore, restorePreparedBackup, type PreparedRestore } from './restoreBackup'
+import { prepareBackupRestore, restorePreparedBackup, resumeAccountRestore, type PreparedRestore } from './restoreBackup'
 
 interface RecoveryDownload { url: string; filename: string; cloud: boolean }
 interface RestorePreview { filename: string; session: PreparedRestore }
@@ -13,11 +13,14 @@ export function BackupImportSection({ disabled = false }: { disabled?: boolean }
   const theme = useThemeStore(state => state.theme)
   const setTheme = useThemeStore(state => state.setTheme)
   const accountBusy = useAccountStore(state => state.busy)
+  const restorePending = useAccountStore(state => state.restorePending)
+  const authenticated = useAccountStore(state => state.authenticated)
   const [busy, setBusy] = useState(false)
   const [preview, setPreview] = useState<RestorePreview | null>(null)
   const [downloads, setDownloads] = useState<RecoveryDownload[]>([])
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
+  const [confirmedRecovery, setConfirmedRecovery] = useState(false)
   const busyRef = useRef(false)
   const activeRef = useRef(true)
   const urls = useRef<string[]>([])
@@ -68,18 +71,54 @@ export function BackupImportSection({ disabled = false }: { disabled?: boolean }
         setMessage(warning ?? `バックアップを復元しました。${themeWarning}`)
       }
     } catch (cause) {
+      if (activeRef.current) {
+        if (useAccountStore.getState().restorePending) setPreview(null)
+        setError(cause instanceof Error ? cause.message : String(cause))
+      }
+    } finally { busyRef.current = false; if (activeRef.current) setBusy(false) }
+  }
+
+  async function resume(useCurrentCloud: boolean) {
+    if (!confirmedRecovery || busyRef.current) return
+    busyRef.current = true
+    setBusy(true)
+    setError(null)
+    setMessage(null)
+    try {
+      const { warning, theme } = await resumeAccountRestore(useCurrentCloud)
+      let themeWarning = ''
+      try { if (theme) setTheme(theme) } catch { themeWarning = 'テーマの反映にはアプリの再読み込みが必要です。' }
+      if (activeRef.current) {
+        setConfirmedRecovery(false)
+        setMessage(warning ?? `クラウドの内容を端末に反映しました。${themeWarning}`)
+      }
+    } catch (cause) {
       if (activeRef.current) setError(cause instanceof Error ? cause.message : String(cause))
     } finally { busyRef.current = false; if (activeRef.current) setBusy(false) }
   }
 
+  const recoveryDisabled = disabled || busy || accountBusy || !authenticated
   return <div className="mt-4 border-t border-border pt-4">
     <h3 className="mb-2 text-sm font-semibold">JSONから復元</h3>
     <p className="mb-3 text-sm text-muted">保存済みのバックアップJSONを選び、日時と件数を確認して復元できます。ファイルを選ぶだけでは現在のデータは変わりません。</p>
     <label htmlFor={inputId} className="mb-1 block text-xs text-muted">バックアップJSONを選択</label>
-    <input id={inputId} type="file" accept=".json,application/json" aria-label="バックアップJSONを選択" disabled={disabled || busy || accountBusy}
+    <input id={inputId} type="file" accept=".json,application/json" aria-label="バックアップJSONを選択" disabled={disabled || busy || accountBusy || restorePending}
       className="block min-h-11 w-full min-w-0 rounded-lg border border-border p-2 text-sm disabled:opacity-40"
       onChange={event => { const file = event.target.files?.[0]; event.currentTarget.value = ''; if (file) void readFile(file) }} />
-    {busy && !preview && <p role="status" className="mt-2 text-sm text-muted">JSONと復元先の状態を確認しています…</p>}
+    {restorePending && <div className="mt-3 grid gap-2 rounded-lg border border-border p-3">
+      <p className="text-sm font-semibold">途中の復元があります</p>
+      <p className="text-sm text-muted">復元を再開するまでは通常の同期が止まります。端末の内容を置き換えるため、必要なデータは先にJSONで保存してください。{!authenticated && '再開するにはGoogleにログインしてください。'}</p>
+      <label className="flex min-h-11 items-center gap-2 text-sm">
+        <input type="checkbox" disabled={recoveryDisabled} checked={confirmedRecovery} onChange={event => setConfirmedRecovery(event.target.checked)} />
+        この端末のデータを置き換えることを確認しました
+      </label>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className={BUTTON} disabled={recoveryDisabled || !confirmedRecovery} onClick={() => void resume(false)}>復元を再開</button>
+        <button type="button" className={BUTTON} disabled={recoveryDisabled || !confirmedRecovery} onClick={() => void resume(true)}>現在のクラウドを端末に反映</button>
+      </div>
+      <p className="text-xs text-muted">別の端末でクラウドが更新されていた場合は「現在のクラウドを端末に反映」を使えます。</p>
+    </div>}
+    {busy && !preview && <p role="status" className="mt-2 text-sm text-muted">{restorePending ? '復元の状態を確認しています…' : 'JSONと復元先の状態を確認しています…'}</p>}
     {downloads.length > 0 && !preview && <RecoveryLinks downloads={downloads} />}
     {message && <p role="status" className="mt-3 text-sm text-muted">{message}</p>}
     {error && !preview && <p role="alert" className="mt-3 text-sm text-red-500">{error}</p>}

@@ -14,12 +14,13 @@ export function GoogleAccountSection() {
       <p className="break-all text-sm">{state.user.email}{!state.authenticated && '（再ログイン待ち・端末データは利用できます）'}</p>
       <p className="my-2 text-xs text-muted">前回のタスク同期：{state.lastSyncedAt ? new Date(state.lastSyncedAt).toLocaleString('ja-JP') : '未実施'}</p>
       <div className="flex flex-wrap gap-2">
-        <button className={BUTTON} disabled={state.busy || !state.authenticated} onClick={() => void syncAccount()}>タスクを同期</button>
-        <button className={BUTTON} disabled={state.busy || !state.authenticated} onClick={() => void importDeviceTasks()}>未ログイン時のタスクを取り込む</button>
+        <button className={BUTTON} disabled={state.busy || !state.authenticated || state.restorePending} onClick={() => void syncAccount()}>タスクを同期</button>
+        <button className={BUTTON} disabled={state.busy || !state.authenticated || state.restorePending} onClick={() => void importDeviceTasks()}>未ログイン時のタスクを取り込む</button>
         <button className={BUTTON} disabled={state.busy} onClick={() => void logoutAccount()}>ログアウト</button>
       </div>
       <p className="mt-2 text-xs text-muted">取り込みは明示的に実行します。未ログイン時のデータと、アカウントごとの端末データはそれぞれ残ります。</p>
-      {state.conflicts.length > 0 && <div className="mt-3 rounded-lg border border-border p-3">
+      {state.restorePending && <p className="my-2 text-xs text-muted">同期を再開するには「バックアップ」で途中の復元を確認してください。</p>}
+      {!state.restorePending && state.conflicts.length > 0 && <div className="mt-3 rounded-lg border border-border p-3">
         <p className="text-sm">同時に編集されたデータ：{state.conflicts.slice(0,5).join('、')}</p>
         <p className="my-2 text-xs text-muted">先にバックアップを保存してから、競合したデータのどちらを優先するか選択してください。競合していない変更は両方とも残します。</p>
         <div className="flex flex-wrap gap-2">
@@ -35,7 +36,7 @@ export function GoogleAccountSection() {
         <button className={BUTTON} disabled={state.busy || !state.authenticated} onClick={() => void startGoogleLogin(true)}>Googleカレンダーを連携・再認証</button>
         <button className={BUTTON} disabled={state.busy || !state.authenticated} onClick={() => void runAccountAction(loadCalendars)}>カレンダー一覧を取得</button>
         {state.calendar && <>
-          <button className={BUTTON} disabled={state.busy || !state.authenticated} onClick={() => void syncCalendar()}>カレンダーと同期</button>
+          <button className={BUTTON} disabled={state.busy || !state.authenticated || state.restorePending} onClick={() => void syncCalendar()}>カレンダーと同期</button>
           <button className={BUTTON} disabled={state.busy || !state.authenticated} onClick={() => void runAccountAction(async () => {
             await accountApi('/api/account/calendar', { method: 'DELETE' })
             useAccountStore.setState({ calendar: null, calendars: [], calendarError: null, message: 'カレンダー連携を解除しました。タスクとGoogleの予定は残しています。' })

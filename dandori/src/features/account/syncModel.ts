@@ -11,6 +11,14 @@ export interface SyncData {
   monthlySnapshots: MonthlySnapshot[]
 }
 export interface SyncDocument { revision: number; data: SyncData }
+export interface PendingAccountRestore {
+  id: string
+  accountId: string
+  expectedRevision: number
+  target: SyncData
+  theme: 'system' | 'light' | 'dark'
+  retryStarted?: boolean
+}
 export const SYNC_TABLES = ['projects', 'workflows', 'issues', 'recurrenceRules', 'sprints', 'settings', 'monthlySnapshots'] as const
 export type ConflictChoice = 'local' | 'remote'
 export const MAX_SYNC_BYTES = 1_000_000
@@ -39,10 +47,35 @@ export function initialSyncData(timestamp = Date.now()): SyncData {
 export function mergeSyncData(base: SyncData, local: SyncData, remote: SyncData, choice?: ConflictChoice) {
   const data = structuredClone(remote)
   const conflicts: string[] = []
+
+  function preferLocalEdit<T>(previous: T, edited: T, cloud: T, label: string): boolean {
+    if (sameValue(edited, previous) || sameValue(edited, cloud)) return false
+    if (sameValue(cloud, previous)) return true
+    conflicts.push(label)
+    return choice === 'local'
+  }
+
+  // 初回同期時の作成日時や、タスク追加による採番の差は編集競合に含めない。
+  const [project] = data.projects
+  const [localProject] = local.projects
+  const [baseProject] = base.projects
+  for (const [field, label] of [['name', 'プロジェクト名'], ['color', 'プロジェクトの色']] as const) {
+    if (preferLocalEdit(baseProject[field], localProject[field], project[field], label)) {
+      project[field] = localProject[field]
+      project.updatedAt = Math.max(project.updatedAt, localProject.updatedAt)
+    }
+  }
+  const [workflow] = data.workflows
+  const [localWorkflow] = local.workflows
+  if (preferLocalEdit(base.workflows[0].statuses, localWorkflow.statuses, workflow.statuses, 'ワークフロー')) {
+    workflow.statuses = structuredClone(localWorkflow.statuses)
+    workflow.updatedAt = Math.max(workflow.updatedAt, localWorkflow.updatedAt)
+  }
+
   for (const table of SYNC_TABLES) {
     if (table === 'projects' || table === 'workflows') continue
     const old = new Map<string, unknown>(base[table].map(row => [row.id, row]))
-    const cloud = new Map<string, unknown>(remote[table].map(row => [row.id, row]))
+    const cloud = new Map<string, unknown>(data[table].map(row => [row.id, row]))
     for (const row of local[table]) {
       if (sameValue(row, old.get(row.id))) continue
       const current = cloud.get(row.id)
@@ -50,7 +83,7 @@ export function mergeSyncData(base: SyncData, local: SyncData, remote: SyncData,
         conflicts.push(table === 'issues' ? (row as Issue).title : `${table}: ${row.id}`)
         if (!choice || choice === 'remote') continue
       }
-      cloud.set(row.id, row)
+      cloud.set(row.id, structuredClone(row))
     }
     Object.assign(data, { [table]: [...cloud.values()] })
   }
@@ -61,8 +94,42 @@ export function mergeSyncData(base: SyncData, local: SyncData, remote: SyncData,
     if (numbers.has(issue.number)) issue.number = next++
     numbers.add(issue.number)
   }
-  data.projects[0].nextNumber = next
-  return { data, conflicts }
+  project.nextNumber = next
+  const statusConflicts = mergeStatusReferences(data, local, remote, choice)
+  return { data, conflicts: [...conflicts, ...statusConflicts], statusConflicts }
+}
+
+function mergeStatusReferences(data: SyncData, local: SyncData, remote: SyncData, choice?: ConflictChoice): string[] {
+  const workflow = data.workflows[0]
+  const statuses = new Map(workflow.statuses.map(status => [status.id, status]))
+  const missing = data.issues.filter(issue => !statuses.has(issue.statusId))
+  const conflicts = missing.filter(issue => issue.deletedAt === null).map(issue => `ステータス参照（${issue.title}）`)
+  if (!missing.length) return conflicts
+
+  const preferred = choice === 'local' ? local : remote
+  const preferredStatuses = new Map(preferred.workflows[0].statuses.map(status => [status.id, status]))
+  const preferredIssues = new Map(preferred.issues.map(issue => [issue.id, issue]))
+  const knownStatuses = new Map([...local.workflows[0].statuses, ...remote.workflows[0].statuses].map(status => [status.id, status]))
+  if (choice) {
+    for (const issue of missing) {
+      const status = preferredStatuses.get(issue.statusId)
+      if (issue.deletedAt !== null || !status || statuses.has(status.id)) continue
+      const kept = structuredClone(status)
+      workflow.statuses.push(kept)
+      statuses.set(kept.id, kept)
+    }
+  }
+  for (const issue of missing) {
+    if (statuses.has(issue.statusId) || (!choice && issue.deletedAt === null)) continue
+    const preferredStatusId = preferredIssues.get(issue.id)?.statusId
+    const originalCategory = knownStatuses.get(issue.statusId)?.category
+    // 削除を優先しても、独立して作られたタスクや削除済み記録は残す。
+    const replacement = (preferredStatusId ? statuses.get(preferredStatusId) : undefined)
+      ?? workflow.statuses.find(status => status.category === originalCategory)
+      ?? workflow.statuses.find(status => status.category === 'todo')
+    if (replacement) issue.statusId = replacement.id
+  }
+  return conflicts
 }
 
 export function importGuestData(guest: SyncData, account: SyncData): SyncData {
