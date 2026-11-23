@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useMemo, useRef, useState, type FormEvent } from 'react'
 import type { Issue, IssueType, Priority, RecurrenceFrequency } from '../../db/types'
 import { todayStr } from '../../lib/date'
 import { currentMonth, isValidMonth, issueMonth } from '../../lib/month'
@@ -30,7 +30,6 @@ export function useIssueEditorForm({ issue: initialIssue, defaultStatusId, defau
   const moveIssue = useDataStore((s) => s.moveIssue)
   const recurrenceRule = useDataStore((s) => s.recurrenceRules.find((rule) => rule.id === issue?.recurrenceId))
   const issues = useDataStore((s) => s.issues)
-  // 並び順は同じステータス・同じ対象月の中で扱う。
   const column = useMemo(
     () =>
       issue
@@ -80,6 +79,8 @@ export function useIssueEditorForm({ issue: initialIssue, defaultStatusId, defau
   const [childTitle, setChildTitle] = useState('')
   const [addingChild, setAddingChild] = useState(false)
   const [detachingId, setDetachingId] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const savingRef = useRef(false)
   // 元の入力内容を失わないよう、関連タスクは別の編集画面で開く。
   const [relatedIssueId, setRelatedIssueId] = useState<string | null>(null)
   const relatedIssue = issues.find((item) => item.id === relatedIssueId)
@@ -100,11 +101,18 @@ export function useIssueEditorForm({ issue: initialIssue, defaultStatusId, defau
   }
 
   async function run(action: () => Promise<unknown>) {
+    if (savingRef.current) return
+    savingRef.current = true
+    setSaving(true)
+    setError(null)
     try {
       await action()
       onClose()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      savingRef.current = false
+      setSaving(false)
     }
   }
 
@@ -137,7 +145,7 @@ export function useIssueEditorForm({ issue: initialIssue, defaultStatusId, defau
 
   function onSubmit(e: FormEvent) {
     e.preventDefault()
-    if (detachingId) return
+    if (detachingId || savingRef.current) return
     if (!isValidMonth(planningMonth)) { setError('対象月を選択してください'); return }
     if (calendarAllDay && !date) { setError('終日予定の日付を指定してください'); return }
     const timeError = calendarAllDay ? null : scheduleInputError(schedule)
@@ -210,7 +218,7 @@ export function useIssueEditorForm({ issue: initialIssue, defaultStatusId, defau
     recurrence, setRecurrence, recurrenceInterval, setRecurrenceInterval,
     recurrenceWeekdays, setRecurrenceWeekdays, recurrenceEndDate, setRecurrenceEndDate,
     editScope, setEditScope, recurrenceRule,
-    childTitle, setChildTitle, addingChild, detachingId, relatedIssue, setRelatedIssueId,
+    childTitle, setChildTitle, addingChild, detachingId, saving, relatedIssue, setRelatedIssueId,
     descendants, parentOptions, children, isRoutine, column, position,
     reorder, addChild, detachParent, onSubmit, deleteIssue, onClose,
   }

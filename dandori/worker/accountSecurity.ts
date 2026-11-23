@@ -30,8 +30,15 @@ export function readCookie(request: Request, name: string): string | undefined {
 export function cookie(name: string, value: string, seconds: number, origin: string): string {
   return `${name}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${seconds}${origin.startsWith('https://') ? '; Secure' : ''}`
 }
-export async function readLimitedJson<T>(request: Request, limit: number): Promise<T> {
-  if (!request.body || !request.headers.get('content-type')?.startsWith('application/json')) throw new Error('JSON形式が必要です')
+export class HttpError extends Error {
+  status: number
+  constructor(status: number, message: string) {
+    super(message)
+    this.status = status
+  }
+}
+export async function readLimitedJson<T>(request: Request, limit: number, tooLargeMessage = '同期データの上限（1MB）を超えています'): Promise<T> {
+  if (!request.body || !request.headers.get('content-type')?.startsWith('application/json')) throw new HttpError(400, 'JSON形式が必要です')
   const reader = request.body.getReader()
   const decoder = new TextDecoder()
   let size = 0, text = ''
@@ -39,10 +46,11 @@ export async function readLimitedJson<T>(request: Request, limit: number): Promi
     const { done, value } = await reader.read()
     if (done) break
     size += value.byteLength
-    if (size > limit) { await reader.cancel(); throw new Error('同期データの上限（1MB）を超えています') }
+    if (size > limit) { await reader.cancel(); throw new HttpError(413, tooLargeMessage) }
     text += decoder.decode(value, { stream: true })
   }
-  return JSON.parse(text + decoder.decode()) as T
+  try { return JSON.parse(text + decoder.decode()) as T }
+  catch { throw new HttpError(400, 'JSON形式が正しくありません') }
 }
 export function trustedOrigin(request: Request, origin: string): boolean {
   return request.headers.get('origin') === origin && request.headers.get('sec-fetch-site') !== 'cross-site'

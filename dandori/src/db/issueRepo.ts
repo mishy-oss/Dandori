@@ -3,21 +3,14 @@ import { db } from './db'
 import { newId, now } from '../lib/id'
 import { compareRank, rankAfter, rankBetween, ranksForCount } from '../lib/rank'
 import { validateSchedule } from '../lib/schedule'
-import { isValidDateStr, todayStr } from '../lib/date'
+import { todayStr } from '../lib/date'
 import { nextRuleDate, recurrenceSource, recurrenceTemplate } from '../lib/recurrence'
 import { getProject, getWorkflow } from './projectRepo'
 import { getSprint } from './sprintRepo'
-import { expandRecurrenceInSprint, expandRecurrenceInMonth } from './recurrenceRepo'
+import { applyRecurrencePatch, expandRecurrenceInSprint, expandRecurrenceInMonth, normalizeRecurrence, type RecurrenceInput } from './recurrenceRepo'
 import { isValidMonth, issueMonth, currentMonth } from '../lib/month'
 import { existingIssueLabels, normalizeIssueLabels } from '../lib/labels'
-import type { Issue, IssueType, Priority, RecurrenceFrequency, RecurrenceRule } from './types'
-
-export interface RecurrenceInput {
-  frequency: RecurrenceFrequency
-  interval: number
-  weekdays?: number[]
-  endDate?: string | null
-}
+import type { Issue, IssueType, Priority, RecurrenceRule } from './types'
 
 export interface CreateIssueInput {
   projectId: string
@@ -82,43 +75,6 @@ export async function syncParentStatuses(ids: (string | null)[], timestamp: numb
 
 function activeInStatus(issues: Issue[], statusId: string): Issue[] {
   return issues.filter((i) => i.deletedAt === null && !i.carryoverToId && i.statusId === statusId)
-}
-
-export function normalizeRecurrence(input: RecurrenceInput, startDate: string): Omit<RecurrenceRule, 'id' | 'projectId' | 'createdAt' | 'updatedAt'> {
-  if (!['daily', 'weekly', 'monthly'].includes(input.frequency)) {
-    throw new Error('繰り返し頻度を正しく選択してください')
-  }
-  if (!Number.isInteger(input.interval) || input.interval < 1 || input.interval > 365) {
-    throw new Error('繰り返し間隔は1〜365で指定してください')
-  }
-  if (input.endDate && !isValidDateStr(input.endDate)) {
-    throw new Error('繰り返し終了日が正しくありません')
-  }
-  if (input.endDate && input.endDate < startDate) {
-    throw new Error('繰り返し終了日は開始日以降にしてください')
-  }
-
-  let weekdays: number[] | undefined
-  if (input.frequency === 'weekly') {
-    weekdays = input.weekdays ?? [new Date(`${startDate}T00:00:00`).getDay()]
-    if (
-      weekdays.length === 0 ||
-      weekdays.some((weekday) => !Number.isInteger(weekday) || weekday < 0 || weekday > 6) ||
-      new Set(weekdays).size !== weekdays.length
-    ) {
-      throw new Error('繰り返す曜日を1つ以上選択してください')
-    }
-    weekdays = [...weekdays].sort((a, b) => a - b)
-  }
-
-  return {
-    frequency: input.frequency,
-    interval: input.interval,
-    ...(weekdays && { weekdays }),
-    startDate,
-    endDate: input.endDate || null,
-    active: true,
-  }
 }
 
 async function nextRankInStatus(
@@ -284,70 +240,37 @@ export async function updateIssue(
     if (next.calendarAllDay) next.durationMin = 1440
     validateSchedule(next.date, next.startMin, next.durationMin)
 
-    if (recurrencePatch !== undefined) {
-      const existingRule = current.recurrenceId
-        ? await db.recurrenceRules.get(current.recurrenceId)
-        : undefined
-      if (recurrencePatch === null) {
-        if (existingRule) {
-          await db.recurrenceRules.update(existingRule.id, { active: false, updatedAt: t })
-          await db.issues.where('recurrenceId').equals(existingRule.id).filter(issue => !issue.carryoverToId).modify({ recurrenceId: null, updatedAt: t })
-        }
-        next.recurrenceId = null
-      } else {
-        const recurrenceStartDate = next.date ?? existingRule?.startDate ?? todayStr()
-        const recurrenceValues = normalizeRecurrence(recurrencePatch, recurrenceStartDate)
-        if (existingRule) {
-          await db.recurrenceRules.put({ ...existingRule, ...recurrenceValues, updatedAt: t })
-          next.recurrenceId = existingRule.id
-        } else {
-          const newRule: RecurrenceRule = {
-            id: newId(),
-            projectId: current.projectId,
-            ...recurrenceValues,
-            createdAt: t,
-            updatedAt: t,
-          }
-          await db.recurrenceRules.add(newRule)
-          next.recurrenceId = newRule.id
-          next.recurrenceSeriesId = newRule.id
-          next.recurrenceDate = next.date ?? recurrenceStartDate
-        }
-      }
-    }
+    if (recurrencePatch !== undefined) await applyRecurrencePatch(next, recurrencePatch)
 
     const newlyScheduled = (current.date === null || current.startMin === null)
       && next.date !== null && next.startMin !== null
     const clearedSchedule = (issuePatch.date === null || issuePatch.startMin === null)
       && (next.date === null || next.startMin === null)
-    if (newlyScheduled || clearedSchedule) {
-      const project = await getProject(current.projectId)
-      const workflow = project && (await getWorkflow(project.workflowId))
-      const status = workflow?.statuses.find((s) => s.id === next.statusId)
-      if (status?.category === 'todo') {
-        if (newlyScheduled) next.statusId = workflow?.statuses.find((s) => s.category === 'doing')?.id ?? next.statusId
-      }
-      if (clearedSchedule && status && status.category !== 'done' && status.category !== 'routine') {
-        next.statusId = workflow?.statuses.find((s) => s.category === 'todo')?.id ?? next.statusId
-      }
-    }
-
-    let transitionedToDone = false
-    if (issuePatch.statusId !== undefined) {
+    let completedStatusIds: string[] = []
+    if (newlyScheduled || clearedSchedule || 'statusId' in issuePatch) {
       const project = await getProject(current.projectId)
       const workflow = project && await getWorkflow(project.workflowId)
-      const chosenStatus = workflow?.statuses.find((status) => status.id === issuePatch.statusId)
-      if (chosenStatus && chosenStatus.category !== 'done') next.isRoutine = chosenStatus.category === 'routine'
-    }
-    if (next.statusId !== current.statusId) {
-      const project = await getProject(current.projectId)
-      const workflow = project && (await getWorkflow(project.workflowId))
-      const status = workflow?.statuses.find((s) => s.id === next.statusId)
-      if (!status) throw new Error('ステータスが見つかりません')
-      const previousStatus = workflow?.statuses.find((s) => s.id === current.statusId)
-      transitionedToDone = status.category === 'done' && previousStatus?.category !== 'done'
-      next.completedAt = status.category === 'done' ? t : null
-      next.rank = await nextRankInStatus(current.projectId, status.id)
+      const statuses = workflow?.statuses ?? []
+      const chosenStatus = statuses.find((status) => status.id === next.statusId)
+      if (issuePatch.statusId !== undefined && chosenStatus && chosenStatus.category !== 'done') {
+        next.isRoutine = chosenStatus.category === 'routine'
+      }
+      if (newlyScheduled && chosenStatus?.category === 'todo') {
+        next.statusId = statuses.find((status) => status.category === 'doing')?.id ?? next.statusId
+      }
+      if (clearedSchedule && chosenStatus && chosenStatus.category !== 'done' && chosenStatus.category !== 'routine') {
+        next.statusId = statuses.find((status) => status.category === 'todo')?.id ?? next.statusId
+      }
+      if (next.statusId !== current.statusId) {
+        const status = statuses.find((status) => status.id === next.statusId)
+        if (!status) throw new Error('ステータスが見つかりません')
+        const previousStatus = statuses.find((status) => status.id === current.statusId)
+        if (status.category === 'done' && previousStatus?.category !== 'done') {
+          completedStatusIds = statuses.filter((status) => status.category === 'done').map((status) => status.id)
+        }
+        next.completedAt = status.category === 'done' ? t : null
+        next.rank = await nextRankInStatus(current.projectId, status.id)
+      }
     }
 
     await db.issues.put(next)
@@ -358,16 +281,19 @@ export async function updateIssue(
     if (next.planningMonth && !next.sprintId && next.recurrenceId && (recurrencePatch !== undefined || issuePatch.planningMonth !== undefined)) {
       await expandRecurrenceInMonth(next, next.planningMonth, t)
     }
-    await syncParentStatuses([next.id], t)
-    const saved = (await getIssue(next.id))!
-    const project = await getProject(saved.projectId)
-    const workflow = project && await getWorkflow(project.workflowId)
-    if (transitionedToDone && workflow?.statuses.some((status) => status.id === saved.statusId && status.category === 'done')) {
-      await createNextOccurrence(saved, t)
-    }
-    await syncParentStatuses([current.parentId, next.id], t)
-    return (await getIssue(next.id))!
+    return finalizeIssueChange(next, completedStatusIds, current.parentId)
   })
+}
+
+async function finalizeIssueChange(issue: Issue, completedStatusIds: string[], previousParentId: string | null = null): Promise<Issue> {
+  // 子の進捗が手動の完了を取り消した場合は、繰り返しの次回分を生成しない。
+  await syncParentStatuses([issue.id], issue.updatedAt)
+  const saved = (await getIssue(issue.id))!
+  if (completedStatusIds.includes(saved.statusId)) await createNextOccurrence(saved, issue.updatedAt)
+
+  // 次の回が未完了の子として追加されると、親の進捗が変わることがある。
+  await syncParentStatuses([previousParentId, issue.id], issue.updatedAt)
+  return (await getIssue(issue.id))!
 }
 
 async function createNextOccurrence(completed: Issue, timestamp: number): Promise<void> {
@@ -432,8 +358,7 @@ async function validateParent(projectId: string, parentId: string, issueId?: str
   throw new Error('親Issueが見つかりません')
 }
 
-// ステータス列 statusId の index 番目(自分自身を除く)へ移動する。スケジュール(date/startMin)には触れない。
-// scopeSprintId を渡すと、そのスプリント(null はバックログ)のIssueだけを「見えている列」として index を解釈する
+// ドラッグ位置の index は、対象月や旧スプリントで絞った表示中の列を基準にする。
 export async function moveIssue(
   id: string,
   statusId: string,
@@ -482,11 +407,8 @@ export async function moveIssue(
       updatedAt: t,
     }
     await db.issues.put(moved)
-    await syncParentStatuses([moved.id], t)
-    const saved = (await getIssue(moved.id))!
-    if (status.category === 'done' && previousStatus?.category !== 'done' && saved.statusId === status.id) await createNextOccurrence(saved, t)
-    await syncParentStatuses([moved.id], t)
-    return (await getIssue(moved.id))!
+    const completedStatusIds = status.category === 'done' && previousStatus?.category !== 'done' ? [status.id] : []
+    return finalizeIssueChange(moved, completedStatusIds)
   })
 }
 

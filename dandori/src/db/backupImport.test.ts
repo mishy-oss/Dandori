@@ -8,6 +8,9 @@ import { carryoverIssue } from './carryoverRepo'
 import { updateSettings } from './settingsRepo'
 import { readSyncData } from '../features/account/accountRepo'
 import { initialSyncData, isSyncData } from '../features/account/syncModel'
+import { fixtureIssue } from '../features/account/syncFixtures'
+import { recurrenceTemplate } from '../lib/recurrence'
+import { validateSchedule } from '../lib/schedule'
 
 beforeEach(async () => { await Promise.all(db.tables.map(table => table.clear())) })
 
@@ -71,6 +74,46 @@ it('rejects impossible dates, dangling and cyclic parents, duplicate IDs, invali
     expect(() => parseBackup(JSON.stringify(invalid))).toThrow('内容が不正')
   }
   expect(await readSyncData()).toEqual(file.data)
+})
+
+it.each([
+  { date: '2026-11-22', startMin: 540, durationMin: 4.5, valid: false },
+  { date: '2026-11-22', startMin: 540, durationMin: 4, valid: false },
+  { date: '2026-11-22', startMin: 540.5, durationMin: 30, valid: false },
+  { date: '2026-11-22', startMin: 1435, durationMin: 10, valid: false },
+  { date: null, startMin: 540, durationMin: 30, valid: false },
+  { date: '2026-02-30', startMin: null, durationMin: 30, valid: false },
+  { date: '2026-11-22', startMin: 1435, durationMin: 5, valid: true },
+  { date: '2026-11-22', startMin: null, durationMin: 1440, valid: true },
+  { date: null, startMin: null, durationMin: 30, valid: true },
+])('uses the same schedule rules for editing, syncing and restoring: %j', ({ date, startMin, durationMin, valid }) => {
+  const data = initialSyncData(1)
+  data.projects[0].nextNumber = 2
+  data.issues = [fixtureIssue({ date, startMin, durationMin })]
+
+  const validate = () => validateSchedule(date, startMin, durationMin)
+  if (valid) expect(validate).not.toThrow()
+  else expect(validate).toThrow()
+  expect(isSyncData(data)).toBe(valid)
+  expect(isBackupData(data)).toBe(valid)
+})
+
+it('rejects an invalid recurrence template even if the scheduled instance is valid', () => {
+  const data = initialSyncData(1)
+  data.projects[0].nextNumber = 2
+  const issue = fixtureIssue({ recurrenceId: 'daily' })
+  const template = recurrenceTemplate(issue)
+  data.issues = [issue]
+  data.recurrenceRules = [{
+    id: 'daily', projectId: issue.projectId, frequency: 'daily', interval: 1, startDate: '2026-11-17',
+    endDate: null, active: true, createdAt: 1, updatedAt: 1, template,
+  }]
+  expect(isSyncData(data)).toBe(true)
+  expect(isBackupData(data)).toBe(true)
+
+  template.date = null
+  expect(isSyncData(data)).toBe(false)
+  expect(isBackupData(data)).toBe(false)
 })
 
 it('rolls all tables back if a write fails after clearing the first tables', async () => {

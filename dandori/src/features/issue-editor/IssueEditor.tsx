@@ -17,7 +17,7 @@ export function IssueEditor(props: IssueEditorProps) {
     issue, workflow, issues, relatedIssue, setRelatedIssueId,
     setShowCarryover, title, setTitle, description, setDescription,
     isRoutine, column, position, reorder, error,
-    onSubmit, detachingId, onClose, setShowDelete, showDelete,
+    onSubmit, detachingId, saving, onClose, setShowDelete, showDelete,
     descendants, deleteIssue, showCarryover,
   } = editor
 
@@ -130,10 +130,10 @@ export function IssueEditor(props: IssueEditorProps) {
           </button>
           <button
             type="submit"
-            disabled={detachingId !== null}
+            disabled={detachingId !== null || saving}
             className="min-h-11 flex-1 rounded-lg bg-accent px-4 text-sm font-semibold text-accent-text disabled:opacity-40"
           >
-            保存
+            {saving ? '保存中…' : '保存'}
           </button>
         </div>
       </form>

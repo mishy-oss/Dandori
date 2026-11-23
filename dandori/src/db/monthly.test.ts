@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from './db'
 import { createIssue, deleteIssue, listIssues, moveIssue, updateIssue } from './issueRepo'
 import { createProject, getWorkflow } from './projectRepo'
-import { createSprint } from './sprintRepo'
+import { insertLegacySprint } from '../test/legacySprint'
 import { listMonthlySnapshots, monthlyWork, prepareMonthlyProject } from './monthlyRepo'
 import { issueMonth, monthRange, shiftMonth } from '../lib/month'
 import { buildMonthBurndown } from '../features/monthly/monthlyLogic'
@@ -28,7 +28,7 @@ describe('monthly planning', () => {
 
   it('migrates existing tasks without losing their old association', async () => {
     const { project, done } = await setup()
-    const sprint = await createSprint(project.id, { startDate: '2027-01-01', endDate: '2027-01-14' })
+    const sprint = await insertLegacySprint(project.id, '2027-01-01', '2027-01-14')
     const open = await createIssue({ projectId: project.id, title: '未完了', date: '2027-01-10', startMin: 540, sprintId: sprint.id })
     const completed = await createIssue({ projectId: project.id, title: ' 完了', date: '2027-01-11', sprintId: sprint.id, statusId: done.id })
     const future = await createIssue({ projectId: project.id, title: '未来', planningMonth: '2027-03' })
