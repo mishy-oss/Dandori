@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { createElement } from 'react'
+import { act, createElement } from 'react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { useDataStore } from '../../store/data'
 import { DomView, seedUi, task } from '../../test/dom'
@@ -79,4 +79,36 @@ it('detaches the parent immediately and preserves unsaved edits through store re
   expect([...view.container.querySelectorAll('button')].some(button => button.textContent === '親を外す')).toBe(false)
   await view.submit()
   expect(update).toHaveBeenNthCalledWith(2, child.id, expect.objectContaining({ title: '入力途中の子タスク', parentId: null }), undefined)
+})
+
+it('prevents duplicate issue creation when submitted twice while saving', async () => {
+  let resolveCreate!: (issue: ReturnType<typeof task>) => void
+  const create = vi.fn(() => new Promise<ReturnType<typeof task>>(resolve => { resolveCreate = resolve }))
+  const close = vi.fn()
+  useDataStore.setState({ createIssue: create })
+  await view.render(createElement(IssueEditor, { issue: null, onClose: close }))
+  await view.input(view.field('タイトル'), '重複させないタスク')
+  await view.submit()
+  expect(view.button('保存中…').disabled).toBe(true)
+  await view.submit()
+  expect(create).toHaveBeenCalledTimes(1)
+  await act(async () => { resolveCreate(task('created')) })
+  expect(close).toHaveBeenCalledOnce()
+})
+
+it('ignores Enter key while composing Japanese input in the child task field', async () => {
+  const parent = task('parent')
+  const create = vi.fn(async () => task('child'))
+  useDataStore.setState({ issues: [parent], createIssue: create })
+  await view.render(createElement(IssueEditor, { issue: parent, onClose: vi.fn() }))
+  const input = view.get<HTMLInputElement>('[aria-label="子Issueのタイトル"]')
+  await view.input(input, '変換中の子タスク')
+  await act(async () => {
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', isComposing: true, bubbles: true }))
+  })
+  expect(create).not.toHaveBeenCalled()
+  await act(async () => {
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', isComposing: false, bubbles: true }))
+  })
+  expect(create).toHaveBeenCalledWith(expect.objectContaining({ title: '変換中の子タスク', parentId: parent.id }))
 })

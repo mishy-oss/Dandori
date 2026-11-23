@@ -97,18 +97,25 @@ export function BackupImportSection({ disabled = false }: { disabled?: boolean }
     } finally { busyRef.current = false; if (activeRef.current) setBusy(false) }
   }
 
+  const selectDisabled = disabled || busy || accountBusy || restorePending
   const recoveryDisabled = disabled || busy || accountBusy || !authenticated
   return <div className="mt-4 border-t border-border pt-4">
     <h3 className="mb-2 text-sm font-semibold">JSONから復元</h3>
     <p className="mb-3 text-sm text-muted">保存済みのバックアップJSONを選び、日時と件数を確認して復元できます。ファイルを選ぶだけでは現在のデータは変わりません。</p>
-    <label htmlFor={inputId} className="mb-1 block text-xs text-muted">バックアップJSONを選択</label>
-    <input id={inputId} type="file" accept=".json,application/json" aria-label="バックアップJSONを選択" disabled={disabled || busy || accountBusy || restorePending}
-      className="block min-h-11 w-full min-w-0 rounded-lg border border-border p-2 text-sm disabled:opacity-40"
-      onChange={event => { const file = event.target.files?.[0]; event.currentTarget.value = ''; if (file) void readFile(file) }} />
+    {/* ネイティブのファイル入力はOSごとに見た目が浮くため、視覚的に隠して共通ボタンのラベルから開く。 */}
+    <div className="flex flex-wrap items-center gap-2">
+      <input id={inputId} type="file" accept=".json,application/json" aria-label="バックアップJSONを選択" disabled={selectDisabled}
+        className="peer sr-only"
+        onChange={event => { const file = event.target.files?.[0]; event.currentTarget.value = ''; if (file) void readFile(file) }} />
+      <label htmlFor={inputId} className={`${BUTTON} cursor-pointer peer-disabled:pointer-events-none peer-disabled:opacity-40 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent`}>
+        {busy && !preview && !restorePending ? '確認中…' : 'JSONファイルを選択'}
+      </label>
+      <span className="text-xs text-muted">.json / 最大20MB</span>
+    </div>
     {restorePending && <div className="mt-3 grid gap-2 rounded-lg border border-border p-3">
       <p className="text-sm font-semibold">途中の復元があります</p>
       <p className="text-sm text-muted">復元を再開するまでは通常の同期が止まります。端末の内容を置き換えるため、必要なデータは先にJSONで保存してください。{!authenticated && '再開するにはGoogleにログインしてください。'}</p>
-      <label className="flex min-h-11 items-center gap-2 text-sm">
+      <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm">
         <input type="checkbox" disabled={recoveryDisabled} checked={confirmedRecovery} onChange={event => setConfirmedRecovery(event.target.checked)} />
         この端末のデータを置き換えることを確認しました
       </label>
@@ -118,9 +125,9 @@ export function BackupImportSection({ disabled = false }: { disabled?: boolean }
       </div>
       <p className="text-xs text-muted">別の端末でクラウドが更新されていた場合は「現在のクラウドを端末に反映」を使えます。</p>
     </div>}
-    {busy && !preview && <p role="status" className="mt-2 text-sm text-muted">{restorePending ? '復元の状態を確認しています…' : 'JSONと復元先の状態を確認しています…'}</p>}
-    {downloads.length > 0 && !preview && <RecoveryLinks downloads={downloads} />}
+    {busy && !preview && <p role="status" className="mt-3 text-sm text-muted">{restorePending ? '復元の状態を確認しています…' : 'JSONと復元先の状態を確認しています…'}</p>}
     {message && <p role="status" className="mt-3 text-sm text-muted">{message}</p>}
+    {downloads.length > 0 && !preview && <RecoveryLinks downloads={downloads} />}
     {error && !preview && <p role="alert" className="mt-3 text-sm text-red-500">{error}</p>}
     {preview && <RestoreBackupDialog preview={preview} downloads={downloads} busy={busy} error={error} onRestore={() => void restore()}
       onClose={() => { if (!busyRef.current) { setPreview(null); setError(null) } }} />}
@@ -149,20 +156,22 @@ export function RestoreBackupDialog({ preview, downloads, busy, error, onRestore
     className="fixed inset-0 m-auto max-h-[90dvh] w-[calc(100%_-_2rem)] max-w-lg overflow-y-auto rounded-2xl border border-border bg-surface p-4 text-text shadow-xl backdrop:bg-black/50"
     onCancel={event => { event.preventDefault(); if (!busy) onClose() }}>
     <h2 id={`${id}-title`} className="mb-3 text-lg font-bold">バックアップを復元しますか？</h2>
-    <p className="break-all text-sm">{preview.filename}</p>
-    <dl className="my-3 grid grid-cols-[max-content_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm">
-      <dt>書き出し日時</dt><dd>{new Date(file.exportedAt).toLocaleString('ja-JP')}</dd>
-      <dt>タスク（現在分）</dt><dd>{currentCount(file)}件（履歴・削除済みを含む総件数 {file.data.issues.length}件）</dd>
-      <dt>繰り返し設定</dt><dd>{file.data.recurrenceRules.length}件</dd>
-      <dt>月次履歴</dt><dd>{file.data.monthlySnapshots.length}件</dd>
-      <dt>テーマ</dt><dd>{{ system: 'システム', light: 'ライト', dark: 'ダーク' }[file.theme]}</dd>
-      <dt>現在の端末</dt><dd>{currentCount(preview.session.before)}タスク</dd>
-    </dl>
-    <p id={`${id}-description`} className="text-sm">現在のタスク・ラベル・繰り返し設定・月次履歴・設定を、このファイルの内容で置き換えます。ファイルにないタスクは一覧からなくなります。先に復元前のJSONを保存してください。</p>
-    {preview.session.accountId && <p className="mt-3 text-sm font-medium">現在のGoogleアカウントへ復元し、他の端末にも反映します。ログイン情報は復元しません。端末とクラウドの内容が異なる場合は、両方の復元前JSONを保存できます。</p>}
+    <div className="mb-3 rounded-lg bg-surface-2 p-3">
+      <p className="mb-2 break-all text-sm font-medium">{preview.filename}</p>
+      <dl className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm">
+        <dt className="text-muted">書き出し日時</dt><dd>{new Date(file.exportedAt).toLocaleString('ja-JP')}</dd>
+        <dt className="text-muted">タスク（現在分）</dt><dd>{currentCount(file)}件（履歴・削除済みを含む総件数 {file.data.issues.length}件）</dd>
+        <dt className="text-muted">繰り返し設定</dt><dd>{file.data.recurrenceRules.length}件</dd>
+        <dt className="text-muted">月次履歴</dt><dd>{file.data.monthlySnapshots.length}件</dd>
+        <dt className="text-muted">テーマ</dt><dd>{{ system: 'システム', light: 'ライト', dark: 'ダーク' }[file.theme]}</dd>
+        <dt className="text-muted">現在の端末</dt><dd>{currentCount(preview.session.before)}タスク</dd>
+      </dl>
+    </div>
+    <p id={`${id}-description`} className="text-sm text-muted">現在のタスク・ラベル・繰り返し設定・月次履歴・設定を、このファイルの内容で置き換えます。ファイルにないタスクは一覧からなくなります。先に復元前のJSONを保存してください。</p>
+    {preview.session.accountId && <p className="mt-2 text-sm text-muted">現在のGoogleアカウントへ復元し、他の端末にも反映します。ログイン情報は復元しません。端末とクラウドの内容が異なる場合は、両方の復元前JSONを保存できます。</p>}
     {preview.session.accountId && file.data.projects.length > 1 && <p className="mt-2 text-xs text-muted">複数のプロジェクトは現在のアカウントにまとめます。重複するタスク番号は採番し直し、月次履歴は日付ごとにまとめます。</p>}
     <RecoveryLinks downloads={downloads} />
-    <label className="my-3 flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" disabled={busy} checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />現在のデータを置き換えることを確認しました</label>
+    <label className="my-3 flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm"><input type="checkbox" disabled={busy} checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />現在のデータを置き換えることを確認しました</label>
     {error && <p role="alert" className="my-3 text-sm text-red-500">{error}</p>}
     <div className="mt-4 flex gap-3">
       <button type="button" autoFocus disabled={busy} onClick={onClose} className={`${BUTTON} flex-1`}>キャンセル</button>

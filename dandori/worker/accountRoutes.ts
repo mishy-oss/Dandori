@@ -1,4 +1,4 @@
-import { cookie, digest, randomToken, readCookie, readLimitedJson, trustedOrigin } from './accountSecurity'
+import { cookie, digest, HttpError, randomToken, readCookie, readLimitedJson, trustedOrigin } from './accountSecurity'
 import { isSyncData, MAX_SYNC_BYTES, type SyncData } from '../src/features/account/syncModel'
 import type { AccountIdentity, GoogleTokens, AccountData, AccountSession } from './accountObjects'
 
@@ -119,6 +119,7 @@ export async function handleAccountRequest(request: Request, env: Env): Promise<
     if (url.pathname === '/api/account/calendar-sync' && request.method === 'POST') return json(await account.synchronizeCalendar())
     return json({ error: 'Not found' }, 404)
   } catch (error) {
+    if (error instanceof HttpError) return json({ error: error.message }, error.status)
     // Googleの応答本文や認証コードをエラー応答・ログへ流さない。
     const message = error instanceof Error && /^[\u3040-\u9fff]/.test(error.message) ? error.message : 'Google連携に失敗しました。接続と権限を確認して再試行してください'
     return json({ error: message }, 502)

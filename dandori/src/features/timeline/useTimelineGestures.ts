@@ -61,20 +61,27 @@ export function useTimelineGestures(options: Options) {
   const blockScroll = useRef(false)
   const gestured = useRef(false)
   const teardown = useRef<(() => void) | null>(null)
-
-  useEffect(() => {
-    const root = options.rootRef.current
-    if (!root) return
-    const onTouchMove = (e: TouchEvent) => {
-      if (blockScroll.current && e.cancelable) e.preventDefault()
-    }
-    root.addEventListener('touchmove', onTouchMove, { passive: false })
-    return () => root.removeEventListener('touchmove', onTouchMove)
-    // rootRef は安定した ref なので初回のみ登録する
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  const attachedRoot = useRef<HTMLElement | null>(null)
+  const resetClickTimer = useRef<number | null>(null)
+  const onTouchMove = useCallback((e: TouchEvent) => {
+    if (blockScroll.current && e.cancelable) e.preventDefault()
   }, [])
 
-  useEffect(() => () => teardown.current?.(), [])
+  // 初期読み込み中は画面が null を返すため、DOM マウント後に追従して touchmove を登録する。
+  useEffect(() => {
+    const root = options.rootRef.current
+    if (attachedRoot.current === root) return
+    attachedRoot.current?.removeEventListener('touchmove', onTouchMove)
+    if (root) root.addEventListener('touchmove', onTouchMove, { passive: false })
+    attachedRoot.current = root
+  })
+
+  useEffect(() => () => {
+    attachedRoot.current?.removeEventListener('touchmove', onTouchMove)
+    attachedRoot.current = null
+    if (resetClickTimer.current !== null) clearTimeout(resetClickTimer.current)
+    teardown.current?.()
+  }, [onTouchMove])
 
   const publish = useCallback((next: TimelineDrag | null) => {
     const prev = dragRef.current
@@ -233,7 +240,13 @@ export function useTimelineGestures(options: Options) {
         const result = wasActive && (!isHandle || s.moved) ? compute(s) : null
         finish()
         publish(null)
-        if (wasActive) setTimeout(() => (gestured.current = false), 0)
+        if (wasActive) {
+          if (resetClickTimer.current !== null) clearTimeout(resetClickTimer.current)
+          resetClickTimer.current = window.setTimeout(() => {
+            resetClickTimer.current = null
+            gestured.current = false
+          }, 0)
+        }
         if (!result) return
         const o = optionsRef.current
         if (result.kind === 'move') o.onMove(result.id, result.startMin)
@@ -245,6 +258,7 @@ export function useTimelineGestures(options: Options) {
       function onCancel(ev: PointerEvent) {
         if (ev.pointerId !== s.pointerId) return
         finish()
+        gestured.current = false
         publish(null)
       }
 

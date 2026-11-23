@@ -100,3 +100,21 @@ it('logs out only on a same-origin POST and invalidates the stored session', asy
   expect(response!.status).toBe(204)
   expect(records.has(await digest(token))).toBe(false)
 })
+
+it('returns 400 for malformed JSON and 413 for oversized sync payloads', async () => {
+  const { env, request } = await setup()
+  const badType = await handleAccountRequest(new Request('https://app.test/api/account/sync', {
+    method: 'PUT',
+    headers: { Cookie: request('/api/account/sync').headers.get('Cookie')!, Origin: 'https://app.test', 'X-Dandori-Account': 'alice', 'Content-Type': 'text/plain' },
+    body: 'plain text',
+  }), env)
+  expect(badType!.status).toBe(400)
+  expect((await badType!.json() as { error: string }).error).toBe('JSON形式が必要です')
+
+  const oversized = await handleAccountRequest(new Request('https://app.test/api/account/sync', {
+    method: 'PUT',
+    headers: { Cookie: request('/api/account/sync').headers.get('Cookie')!, Origin: 'https://app.test', 'X-Dandori-Account': 'alice', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ padding: 'x'.repeat(1_000_050) }),
+  }), env)
+  expect(oversized!.status).toBe(413)
+})
