@@ -69,20 +69,29 @@ export function useBoardGestures(options: Options) {
   const blockScroll = useRef(false)
   const gestured = useRef(false)
   const teardown = useRef<(() => void) | null>(null)
-
-  useEffect(() => {
-    const list = options.listRef.current
-    if (!list) return
-    const onTouchMove = (e: TouchEvent) => {
-      if (blockScroll.current && e.cancelable) e.preventDefault()
-    }
-    list.addEventListener('touchmove', onTouchMove, { passive: false })
-    return () => list.removeEventListener('touchmove', onTouchMove)
-    // listRef は安定した ref なので初回のみ登録する
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  const attachedList = useRef<HTMLUListElement | null>(null)
+  const resetClickTimer = useRef<number | null>(null)
+  const leaveTimer = useRef<number | null>(null)
+  const onTouchMove = useCallback((e: TouchEvent) => {
+    if (blockScroll.current && e.cancelable) e.preventDefault()
   }, [])
 
-  useEffect(() => () => teardown.current?.(), [])
+  // 初期読み込み中はリストが未描画のため、DOM マウント後に追従して touchmove を登録する。
+  useEffect(() => {
+    const list = options.listRef.current
+    if (attachedList.current === list) return
+    attachedList.current?.removeEventListener('touchmove', onTouchMove)
+    if (list) list.addEventListener('touchmove', onTouchMove, { passive: false })
+    attachedList.current = list
+  })
+
+  useEffect(() => () => {
+    attachedList.current?.removeEventListener('touchmove', onTouchMove)
+    attachedList.current = null
+    if (resetClickTimer.current !== null) clearTimeout(resetClickTimer.current)
+    if (leaveTimer.current !== null) clearTimeout(leaveTimer.current)
+    teardown.current?.()
+  }, [onTouchMove])
 
   const measureDropIndex = useCallback((issueId: string, y: number) => {
     const list = optionsRef.current.listRef.current
@@ -133,7 +142,13 @@ export function useBoardGestures(options: Options) {
         blockScroll.current = false
         session.current = null
         teardown.current = null
-        if (resetClickFlag) setTimeout(() => (gestured.current = false), 0)
+        if (resetClickFlag) {
+          if (resetClickTimer.current !== null) clearTimeout(resetClickTimer.current)
+          resetClickTimer.current = window.setTimeout(() => {
+            resetClickTimer.current = null
+            gestured.current = false
+          }, 0)
+        }
       }
 
       function tick() {
@@ -243,7 +258,9 @@ export function useBoardGestures(options: Options) {
             setSwipe(null)
           } else {
             setSwipe({ issueId, dx: dx < 0 ? -window.innerWidth : window.innerWidth, active: false })
-            setTimeout(() => {
+            if (leaveTimer.current !== null) clearTimeout(leaveTimer.current)
+            leaveTimer.current = window.setTimeout(() => {
+              leaveTimer.current = null
               setSwipe(null)
               onSwipeMove(issueId, target)
             }, LEAVE_MS)

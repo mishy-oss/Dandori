@@ -70,6 +70,28 @@ it('uses child progress when a parent is edited directly', async () => {
   expect((await moveIssue(parent.id, done, 0)).statusId).toBe(doing)
 })
 
+it.each(['edit', 'move'] as const)('completes a recurring child exactly once through %s and includes its next occurrence in parent progress', async (action) => {
+  const { projectId, parent, a, b, doing, done } = await setup()
+  await updateIssue(a.id, { statusId: done })
+  await updateIssue(b.id, { statusId: done })
+  const recurring = await createIssue({
+    projectId, parentId: parent.id, title: 'Daily', date: '2026-11-08',
+    recurrence: { frequency: 'daily', interval: 1 },
+  })
+  const complete = () => action === 'edit'
+    ? updateIssue(recurring.id, { statusId: done })
+    : moveIssue(recurring.id, done, 0)
+
+  expect((await complete()).statusId).toBe(done)
+  await complete()
+  const occurrences = await db.issues.where('recurrenceId').equals(recurring.recurrenceId!).toArray()
+  expect(occurrences).toHaveLength(2)
+  expect(occurrences.find(issue => issue.id !== recurring.id)).toMatchObject({
+    date: '2026-11-09', parentId: parent.id, completedAt: null,
+  })
+  expect(await getIssue(parent.id)).toMatchObject({ statusId: doing, completedAt: null })
+})
+
 it('repairs existing parent statuses on reload', async () => {
   const { projectId, parent, root, a, b, done } = await setup()
   await db.issues.update(a.id, { statusId: done, completedAt: 1 })

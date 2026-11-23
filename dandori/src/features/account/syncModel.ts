@@ -1,5 +1,6 @@
 import type { Issue, MonthlySnapshot, Project, RecurrenceRule, Settings, Sprint, Workflow } from '../../db/types'
 import { DEFAULT_SETTINGS, ISSUE_TYPES, PRIORITIES } from '../../db/types'
+import { scheduleError } from '../../lib/schedule'
 
 export interface SyncData {
   projects: Project[]
@@ -177,7 +178,16 @@ export function isSyncData(value: unknown): value is SyncData {
       return id(row.carryoverFromId) && source?.carryoverToId === row.id && row.carryoverRootId === (source.carryoverRootId ?? source.id) &&
         row.carryoverSequence === (source.carryoverSequence ?? 0) + 1
     })) return false
-    if (!data.issues.every(row => row.projectId === project.id && Number.isInteger(row.number) && row.number > 0 && ISSUE_TYPES.includes(row.type) && PRIORITIES.includes(row.priority) && text(row.title, 1000) && (row.description === undefined || text(row.description)) && statusIds.has(row.statusId) && nullableId(row.parentId) && (!row.parentId || issueIds.has(row.parentId)) && Array.isArray(row.labels) && row.labels.length <= 100 && row.labels.every(label => text(label, 200)) && (row.date === null || date(row.date)) && (row.dueDate === null || date(row.dueDate)) && nullableNumber(row.startMin) && (row.startMin === null || (row.date !== null && row.startMin < 1440)) && finite(row.durationMin) && row.durationMin > 0 && row.durationMin <= 1440 && nullableNumber(row.deletedAt) && finite(row.updatedAt) && finite(row.createdAt) && text(row.rank, 200) && nullableId(row.recurrenceId) && (!row.recurrenceId || rules.has(row.recurrenceId)))) return false
+    if (!data.issues.every(row =>
+      row.projectId === project.id && Number.isInteger(row.number) && row.number > 0 &&
+      ISSUE_TYPES.includes(row.type) && PRIORITIES.includes(row.priority) &&
+      text(row.title, 1000) && (row.description === undefined || text(row.description)) &&
+      statusIds.has(row.statusId) && nullableId(row.parentId) && (!row.parentId || issueIds.has(row.parentId)) &&
+      Array.isArray(row.labels) && row.labels.length <= 100 && row.labels.every(label => text(label, 200)) &&
+      scheduleError(row.date, row.startMin, row.durationMin) === null && (row.dueDate === null || date(row.dueDate)) &&
+      nullableNumber(row.deletedAt) && finite(row.updatedAt) && finite(row.createdAt) && text(row.rank, 200) &&
+      nullableId(row.recurrenceId) && (!row.recurrenceId || rules.has(row.recurrenceId))
+    )) return false
     if (!data.recurrenceRules.every(row => row.projectId === project.id && ['daily','weekly','monthly'].includes(row.frequency) && Number.isInteger(row.interval) && row.interval > 0 && row.interval <= 1000 && date(row.startDate) && (row.endDate === null || date(row.endDate)) && typeof row.active === 'boolean' && (row.weekdays === undefined || (Array.isArray(row.weekdays) && row.weekdays.every(day => Number.isInteger(day) && day >= 0 && day <= 6))))) return false
     if (!data.issues.every(row => (row.recurrenceDate === undefined || date(row.recurrenceDate)) && (row.recurrenceSeriesId === undefined || id(row.recurrenceSeriesId)))) return false
     if (!data.recurrenceRules.every(row => {
@@ -188,9 +198,7 @@ export function isSyncData(value: unknown): value is SyncData {
       return value === undefined || (value !== null && text(value.title, 1000) && (value.description === undefined || text(value.description)) &&
         ISSUE_TYPES.includes(value.type) && PRIORITIES.includes(value.priority) && nullableId(value.parentId) && (!value.parentId || issueIds.has(value.parentId)) &&
         Array.isArray(value.labels) && value.labels.length <= 100 && value.labels.every(label => text(label, 200)) &&
-        (value.date === null || date(value.date)) && (value.dueDate === null || date(value.dueDate)) &&
-        nullableNumber(value.startMin) && (value.startMin === null || Number.isInteger(value.startMin) && value.startMin < 1440) &&
-        Number.isInteger(value.durationMin) && value.durationMin >= 5 && value.durationMin <= 1440 && (value.startMin === null || value.startMin + value.durationMin <= 1440) &&
+        scheduleError(value.date, value.startMin, value.durationMin) === null && (value.dueDate === null || date(value.dueDate)) &&
         nullableNumber(value.reminderOffsetMin) && nullableNumber(value.estimateMin) && text(value.icon, 200) && text(value.color, 200) &&
         (value.isRoutine === undefined || typeof value.isRoutine === 'boolean') && (value.calendarAllDay === undefined || typeof value.calendarAllDay === 'boolean'))
     })) return false

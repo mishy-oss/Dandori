@@ -74,3 +74,11 @@ it('reports invalid duration causes instead of blaming a missing end time or day
   expect(scheduleInputError(createScheduleInput('', '0'))).toContain('5分以上')
   expect(scheduleInputError(updateScheduleInput(initial, 'endTime', ''))).toBe('終了時刻を正しく入力してください')
 })
+
+it('preserves and validates duration when end time is entered and cleared without a start time', () => {
+  const entered = updateScheduleInput(createScheduleInput('', '45'), 'endTime', '12:00')
+  const cleared = updateScheduleInput(entered, 'endTime', '')
+  expect(cleared).toMatchObject({ startTime: '', endTime: '', duration: '45', basis: 'duration' })
+  expect(scheduleInputError(cleared)).toBeNull()
+  expect(scheduleInputError({ startTime: '', endTime: '', duration: '', basis: 'endTime' })).toBe('所要時間を入力してください')
+})

@@ -1,6 +1,6 @@
 export const SWIPE_THRESHOLD_PX = 80
 
-// カードの中央Y座標の配列(自分以外)から、pointerY の位置に入る挿入インデックスを返す
+// 移動後の列で位置を数えるため、midYs に移動中のカードは含めない。
 export function computeDropIndex(midYs: number[], pointerY: number): number {
   let index = 0
   for (const y of midYs) {

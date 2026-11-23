@@ -52,7 +52,7 @@ export function IssueChildrenField({
             value={childTitle}
             onChange={(e) => setChildTitle(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') {
+              if (e.key === 'Enter' && !e.nativeEvent.isComposing && e.keyCode !== 229) {
                 e.preventDefault()
                 void addChild()
               }

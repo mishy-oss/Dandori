@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { BoardScreen } from '../features/board/BoardScreen'
 import { SettingsScreen } from '../features/settings/SettingsScreen'
 import { useDataStore } from '../store/data'
@@ -9,7 +9,7 @@ import { useMonthlyPlanningEffect } from './useMonthlyPlanningEffect'
 import { Icon } from './Icon'
 import { initializeAccount, prepareAccountCache, useAccountStore } from '../features/account/accountStore'
 import { useAccountSync } from '../features/account/useAccountSync'
-import { readPushDeviceToken, syncPushSchedules, PUSH_SETTINGS_CHANGED_EVENT } from '../features/notifications/pushClient'
+import { buildPushSchedules, readPushDeviceToken, syncPushSchedules, PUSH_SETTINGS_CHANGED_EVENT } from '../features/notifications/pushClient'
 
 const TABS = [
   { id: 'today', label: '予定', icon: 'timeline', Screen: TimelineScreen },
@@ -34,39 +34,38 @@ export function App() {
     // 認証サーバーを待たず、保存済みのタスクを先に表示してオフライン起動を維持する。
     void prepareAccountCache().then(init).then(initializeAccount).catch(error => setStartupError(error instanceof Error ? error.message : String(error)))
   }, [init])
+  const lastPushPayloadRef = useRef<string | null>(null)
   useEffect(() => {
     if (!ready) return
     let timer: ReturnType<typeof setTimeout>
-    const sync = () => {
+    const sync = (force = false) => {
       clearTimeout(timer)
       timer = setTimeout(() => {
         const token = readPushDeviceToken()
-        if (!token || typeof Notification === 'undefined' || Notification.permission !== 'granted') return
+        if (!token || typeof Notification === 'undefined' || Notification.permission !== 'granted') {
+          lastPushPayloadRef.current = null
+          return
+        }
         const doneIds = new Set<string>()
         for (const project of projects) {
           for (const status of workflows[project.workflowId]?.statuses ?? []) {
             if (status.category === 'done') doneIds.add(status.id)
           }
         }
-        const now = Date.now()
-        const notifications = issues
-          .filter((issue) => !issue.carryoverToId && !doneIds.has(issue.statusId) && issue.date && issue.startMin !== null && issue.reminderOffsetMin !== null)
-          .map((issue) => {
-            const [year, month, day] = issue.date!.split('-').map(Number)
-            const at = new Date(year, month - 1, day, 0, issue.startMin!).getTime() - issue.reminderOffsetMin! * 60_000
-            return { id: issue.id, at, title: issue.title }
-          })
-          .filter((item) => item.at > now)
-          .sort((a, b) => a.at - b.at)
-          .slice(0, 500)
-        void syncPushSchedules(token, notifications).catch(() => undefined)
+        const notifications = buildPushSchedules(issues, doneIds)
+        const payload = JSON.stringify([token, notifications])
+        if (!force && payload === lastPushPayloadRef.current) return
+        void syncPushSchedules(token, notifications)
+          .then(() => { lastPushPayloadRef.current = payload })
+          .catch(() => undefined)
       }, 400)
     }
+    const onSettingsChanged = () => sync(true)
     sync()
-    window.addEventListener(PUSH_SETTINGS_CHANGED_EVENT, sync)
+    window.addEventListener(PUSH_SETTINGS_CHANGED_EVENT, onSettingsChanged)
     return () => {
       clearTimeout(timer)
-      window.removeEventListener(PUSH_SETTINGS_CHANGED_EVENT, sync)
+      window.removeEventListener(PUSH_SETTINGS_CHANGED_EVENT, onSettingsChanged)
     }
   }, [ready, issues, workflows, projects])
   const [tab, setTab] = useState<TabId>(() => new URLSearchParams(location.search).has('google') ? 'settings' : 'today')

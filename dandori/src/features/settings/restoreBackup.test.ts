@@ -12,7 +12,7 @@ import { fixtureIssue } from '../account/syncFixtures'
 import { syncAccount, useAccountStore } from '../account/accountStore'
 import { useDataStore } from '../../store/data'
 import { prepareBackupRestore, restorePreparedBackup, resumeAccountRestore } from './restoreBackup'
-import { RestoreBackupDialog } from './BackupImportSection'
+import { BackupImportSection, RestoreBackupDialog } from './BackupImportSection'
 
 const refresh = vi.fn().mockResolvedValue(undefined)
 beforeEach(async () => {
@@ -265,4 +265,12 @@ it('renders backup date, counts, a pre-restore download and an explicit disabled
   expect(html).toContain('復元前の端末JSONを保存')
   expect(html).toContain('現在のデータを置き換えることを確認しました')
   expect(html).toMatch(/disabled=""[^>]*>復元する<\/button>/)
+})
+
+it('renders a unified file picker button while keeping the accessible file input', () => {
+  const html = renderToStaticMarkup(createElement(BackupImportSection))
+  expect(html).toContain('JSONファイルを選択')
+  expect(html).toContain('type="file"')
+  expect(html).toContain('aria-label="バックアップJSONを選択"')
+  expect(html).toContain('class="peer sr-only"')
 })

@@ -28,9 +28,12 @@ export function updateScheduleInput(
   if (field === 'startTime' && !value) {
     return { ...next, endTime: '', basis: 'duration' }
   }
+  if (field === 'endTime' && !value && start === null) {
+    return { ...next, basis: 'duration' }
+  }
   if (next.basis === 'endTime') {
     const end = parseEndTime(next.endTime)
-    next.duration = start !== null && end !== null && end > start ? String(end - start) : ''
+    next.duration = start === null ? current.duration : (end !== null && end > start ? String(end - start) : '')
   } else {
     const duration = Number(next.duration)
     const end = start === null ? null : start + duration
@@ -41,7 +44,7 @@ export function updateScheduleInput(
 }
 
 export function scheduleInputError(input: ScheduleInput): string | null {
-  if (input.basis === 'duration') {
+  if (input.basis === 'duration' || (!input.startTime && !input.endTime)) {
     if (!input.duration.trim()) return '所要時間を入力してください'
     const error = durationError(Number(input.duration))
     if (error) return error

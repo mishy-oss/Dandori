@@ -1,7 +1,33 @@
+import type { Issue } from '../../db/types'
+
 export interface PushSchedule {
   id: string
   at: number
   title: string
+}
+
+export const MAX_PUSH_SCHEDULES = 500
+export const MAX_PUSH_AHEAD_MS = 366 * 24 * 60 * 60 * 1000
+export const MAX_PUSH_TITLE_LENGTH = 120
+
+/* Worker 側の検証上限に合わせて事前に整形し、1件の超過で全体の通知同期が落ちないようにする。 */
+export function buildPushSchedules(
+  issues: ReadonlyArray<Pick<Issue, 'id' | 'title' | 'statusId' | 'date' | 'startMin' | 'reminderOffsetMin' | 'carryoverToId'>>,
+  doneIds: ReadonlySet<string>,
+  now = Date.now(),
+): PushSchedule[] {
+  const maxAt = now + MAX_PUSH_AHEAD_MS
+  return issues
+    .filter((issue) => !issue.carryoverToId && !doneIds.has(issue.statusId) && issue.date && issue.startMin !== null && issue.reminderOffsetMin !== null)
+    .flatMap((issue) => {
+      const title = issue.title.trim().slice(0, MAX_PUSH_TITLE_LENGTH)
+      if (!title) return []
+      const [year, month, day] = issue.date!.split('-').map(Number)
+      const at = new Date(year, month - 1, day, 0, issue.startMin!).getTime() - issue.reminderOffsetMin! * 60_000
+      return Number.isFinite(at) && at > now && at <= maxAt ? [{ id: issue.id, at, title }] : []
+    })
+    .sort((a, b) => a.at - b.at)
+    .slice(0, MAX_PUSH_SCHEDULES)
 }
 
 export const PUSH_SETTINGS_CHANGED_EVENT = 'dandori:push-settings-changed'

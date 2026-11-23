@@ -1,4 +1,4 @@
-﻿import { DurableObject } from 'cloudflare:workers'
+import { DurableObject } from 'cloudflare:workers'
 import {
   buildPushPayload,
   type PushSubscription,
@@ -6,6 +6,7 @@ import {
 } from '@block65/webcrypto-web-push'
 
 import { handleAccountRequest } from './accountRoutes'
+import { HttpError, readLimitedJson, trustedOrigin } from './accountSecurity'
 export { AccountData, AccountSession } from './accountObjects'
 
 const MAX_SCHEDULES = 500
@@ -89,9 +90,7 @@ export class PushDevice extends DurableObject<Env> {
   }
 
   private async readJson(request: Request): Promise<unknown> {
-    const size = Number(request.headers.get('content-length') ?? 0)
-    if (size > 256_000) throw new Error('Request is too large')
-    return request.json()
+    return readLimitedJson(request, 256_000, 'Request is too large')
   }
 
   private async subscribe(request: Request): Promise<Response> {
@@ -113,7 +112,7 @@ export class PushDevice extends DurableObject<Env> {
       return json({ ok: true })
     } catch (error) {
       console.error(JSON.stringify({ message: 'push_subscription_save_failed', error: error instanceof Error ? error.message : String(error) }))
-      return json({ error: 'Invalid request' }, 400)
+      return json({ error: error instanceof HttpError ? error.message : 'Invalid request' }, error instanceof HttpError ? error.status : 400)
     }
   }
 
@@ -162,7 +161,7 @@ export class PushDevice extends DurableObject<Env> {
       return json({ ok: true, scheduled: valid.length })
     } catch (error) {
       console.error(JSON.stringify({ message: 'push_schedule_update_failed', error: error instanceof Error ? error.message : String(error) }))
-      return json({ error: 'Invalid request' }, 400)
+      return json({ error: error instanceof HttpError ? error.message : 'Invalid request' }, error instanceof HttpError ? error.status : 400)
     }
   }
 
@@ -276,16 +275,9 @@ function isDeviceToken(value: unknown): value is string {
   return typeof value === 'string' && /^[A-Za-z0-9_-]{43}$/.test(value)
 }
 
-async function readJson(request: Request): Promise<unknown> {
-  const size = Number(request.headers.get('content-length') ?? 0)
-  if (size > 256_000) throw new Error('Request is too large')
-  return request.json()
-}
-
-/* 端末間で購読情報が混ざらないよう、トークンごとにDurable Objectを分ける。 */
 async function sendToDevice(request: Request, env: Env, path: string): Promise<Response> {
   try {
-    const body = await readJson(request)
+    const body = await readLimitedJson<unknown>(request, 256_000, 'Request is too large')
     if (!body || typeof body !== 'object' || !('deviceToken' in body) || !isDeviceToken(body.deviceToken)) {
       return json({ error: 'Invalid device token' }, 400)
     }
@@ -298,7 +290,7 @@ async function sendToDevice(request: Request, env: Env, path: string): Promise<R
     }))
   } catch (error) {
     console.error(JSON.stringify({ message: 'push_api_request_failed', path, error: error instanceof Error ? error.message : String(error) }))
-    return json({ error: 'Invalid request' }, 400)
+    return json({ error: error instanceof HttpError ? error.message : 'Invalid request' }, error instanceof HttpError ? error.status : 400)
   }
 }
 
@@ -314,6 +306,9 @@ export default {
         return json({ enabled: false }, 503)
       }
       return json({ enabled: true, publicKey: env.VAPID_PUBLIC_KEY })
+    }
+    if (request.method === 'POST' && !trustedOrigin(request, env.APP_ORIGIN || url.origin)) {
+      return json({ error: 'Forbidden origin' }, 403)
     }
     if (request.method === 'POST' && url.pathname === '/api/push/subscribe') return sendToDevice(request, env, '/subscribe')
     if (request.method === 'POST' && url.pathname === '/api/push/schedules') return sendToDevice(request, env, '/schedules')
